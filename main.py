@@ -7,6 +7,7 @@ except ImportError:
 
     pip.main(["install", "-U", "pytorch-lightning[extra]"])
     from pytorch_lightning.utilities.cli import LightningCLI
+
 from made.training import MADETrainer
 from made.data import DEDataModule
 

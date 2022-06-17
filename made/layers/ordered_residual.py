@@ -18,16 +18,17 @@ class OrderedResidual1D(torch.nn.Module, OrderedLayerMixin1D):
             in_features=in_features,
             out_features=out_features,
             device=device,
-            mask_dtype=torch.float,
+            mask_dtype=torch.float if scale else torch.int,
             auto_connection=auto_connection,
         )
+        print("mask dtype residual", in_features, self.mask.dtype)
         self.scale = scale
 
     def reorder(self, *args, **kwargs):
         OrderedLayerMixin1D.reorder(self, *args, **kwargs)
         if self.scale:
             mask = torch.div(self.mask, self.mask.sum(1, keepdim=True))
-            self.mask.data.copy_(torch.where(mask != mask, 0, mask))
+            self.mask.data.copy_(torch.where(mask != mask, torch.zeros_like(mask), mask))
 
     def forward(self, in_features, target_features) -> torch.Tensor:
         return target_features + in_features @ self.mask.T
