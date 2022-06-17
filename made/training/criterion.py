@@ -30,7 +30,7 @@ class MADETrainingCriterion:
     ) -> th.Union[ResultsDict, th.Tuple[ResultsDict, FactorsDict]]:
         if not self.params_regularization:
             # shortcut for trainings with no parameter regularizations
-            nll = -model.log_prob(inputs).mean()
+            nll = -model.log_prob(inputs, reduce=True).mean()
             return (
                 dict(loss=nll, nll=nll)
                 if not return_factors
@@ -50,7 +50,7 @@ class MADETrainingCriterion:
                     params[name]
                 ).mean()  # mean will ensure that regularization results are scalars
             results["nll"] -= model.density_estimator.log_prob(
-                inputs, params_logits=params_logits, params=params
+                inputs, params_logits=params_logits, params=params, reduce=True,
             ).mean()
 
         # normalizing by the number of masks
@@ -77,4 +77,4 @@ class MADETrainingCriterion:
                 if self.scale_regularizations
                 else regularizations[name]
             ) * factors[name]
-        return results if not return_factors else dict(loss=nll, nll=nll), dict()
+        return results if not return_factors else results, factors
