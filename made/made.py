@@ -2,6 +2,7 @@ import torch
 import typing as th
 from .layers import OrderedBlock, AutoRegressiveDensityEstimator1D
 
+
 class MADE(torch.nn.Module):
     def __init__(
         self,
@@ -18,7 +19,7 @@ class MADE(torch.nn.Module):
         batch_norm_args: th.Optional[dict] = None,
         # distribution
         num_mixtures: int = 1,
-        share_params_features: th.Optional[int]= None,
+        share_params_features: th.Optional[int] = None,
         distribution: str = "torch.distributions.Normal",
         distribution_args: th.Optional[dict] = None,
         distribution_params_transforms: th.Optional[dict] = None,
@@ -112,9 +113,20 @@ class MADE(torch.nn.Module):
                 ((self.__mask_indicator + 1) % self.num_masks) if self.num_masks else 0
             )
 
-    def forward(self, inputs, mask_index: th.Optional[int] = None):
+    def forward(
+        self, inputs, mask_index: th.Optional[int] = None, safe_grad: bool = True
+    ):
         if mask_index is None:
-            return self.density_estimator(self.layers(inputs))
+            results = self.density_estimator(self.layers(inputs))
+            if results.requires_grad and safe_grad:
+                results.register_hook(
+                    lambda grad: torch.where(
+                        torch.isnan(grad) + torch.isinf(grad),
+                        torch.zeros_like(grad),
+                        grad,
+                    )
+                )
+            return results
 
     def distributions(self, inputs):
         return self.density_estimator.distributions(self(inputs))
@@ -138,7 +150,6 @@ class MADE(torch.nn.Module):
         results /= self.num_masks or 1.0
         return results
 
-    
     def sample(self, num_samples=1, generator=None, mask_index=None):
         results = torch.rand(num_samples, self.in_features, device=self.ordering.device)
         is_training = self.training
