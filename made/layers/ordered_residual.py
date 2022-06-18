@@ -18,10 +18,9 @@ class OrderedResidual1D(torch.nn.Module, OrderedLayerMixin1D):
             in_features=in_features,
             out_features=out_features,
             device=device,
-            mask_dtype=torch.float if scale else torch.int,
+            mask_dtype=torch.float,
             auto_connection=auto_connection,
         )
-        print("mask dtype residual", in_features, self.mask.dtype)
         self.scale = scale
 
     def reorder(self, *args, **kwargs):

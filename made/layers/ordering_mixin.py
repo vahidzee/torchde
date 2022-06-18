@@ -1,12 +1,13 @@
 import torch
 import typing as th
-import functools 
+import functools
+
 
 class OrderedLayerMixin1D:
     """
     Mixin to support ordered 1D outputs that maintain an autoregressive data flow.
 
-    This class should be initialized after `torch.nn.Module` is inherited and 
+    This class should be initialized after `torch.nn.Module` is inherited and
     initialized in the desired module.
 
     Attributes:
@@ -16,7 +17,6 @@ class OrderedLayerMixin1D:
             A zero-one 2D mask [OUTPUT x INPUT] matrix defining the connectivity
             of output and input neurons.
 
-        
     """
 
     def __init__(
@@ -33,8 +33,8 @@ class OrderedLayerMixin1D:
         Args:
             in_featuers: Number of input dimensions with ordering.
             out_features: Number of output dimensions with ordering.
-            auto_connection: 
-                A boolean value specifying whether output neurons with the 
+            auto_connection:
+                A boolean value specifying whether output neurons with the
                 same labels as the input neurons can be connected.
             device: The device to instanciate the buffers on.
             masked_dtype: Data type for mask matrix.
@@ -42,9 +42,7 @@ class OrderedLayerMixin1D:
             None
         """
         self.auto_connection = auto_connection
-        self.register_buffer(
-            "ordering", torch.empty(out_features, device=device, dtype=torch.int)
-        )
+        self.register_buffer("ordering", torch.empty(out_features, device=device, dtype=torch.int))
         self.register_buffer(
             "mask",
             torch.ones(out_features, in_features, device=device, dtype=mask_dtype),
@@ -74,7 +72,7 @@ class OrderedLayerMixin1D:
         Args:
             inputs_ordering:
                 Ordering of inputs to the layer used for computing new
-                layer inputs (randomly out with the generator), and the 
+                layer inputs (randomly out with the generator), and the
                 connectivity mask.
             ordering: An optional ordering to be enforced
             allow_detached_neurons:
@@ -93,11 +91,7 @@ class OrderedLayerMixin1D:
             # across layer's ordering. (especially used for predicting autoregressive
             # mixture of parameters which requires an output with a size with a multiple
             # of the number of input dimensions.)
-            self.ordering.data.copy_(
-                torch.repeat_interleave(
-                    ordering, self.ordering.shape[0] // ordering.shape[0]
-                )
-            )
+            self.ordering.data.copy_(torch.repeat_interleave(ordering, self.ordering.shape[0] // ordering.shape[0]))
         else:
             self.ordering.data.copy_(
                 torch.randint(
@@ -108,4 +102,3 @@ class OrderedLayerMixin1D:
                 )
             )
         self.mask.data.copy_(self.connection_operator(inputs_ordering[:, None], self.ordering[None, :]).T)
-

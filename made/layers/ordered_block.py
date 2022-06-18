@@ -16,7 +16,7 @@ class OrderedBlock(torch.nn.Module):
         activation: th.Optional[str] = "torch.nn.GELU",
         activation_args: th.Optional[dict] = None,
         # batch norm
-        batch_norm=True,
+        batch_norm: bool = True,
         batch_norm_args: th.Optional[dict] = None,
         # residual
         residual: bool = True,
@@ -36,16 +36,9 @@ class OrderedBlock(torch.nn.Module):
             device=device,
             dtype=dtype,
         )
-        self.activation = (
-            get_value(activation)(**(activation_args or dict())) if activation else None
-        )
+        self.activation = get_value(activation)(**(activation_args or dict())) if activation else None
         self.batch_norm = (
-            torch.nn.BatchNorm1d(
-                num_features=out_features,
-                dtype=dtype,
-                device=device,
-                **(batch_norm_args or dict())
-            )
+            torch.nn.BatchNorm1d(num_features=out_features, dtype=dtype, device=device, **(batch_norm_args or dict()))
             if batch_norm
             else None
         )
