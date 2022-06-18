@@ -28,6 +28,7 @@ class MADE(torch.nn.Module):
         distribution_params_transforms: The transforms to apply to the parameters of the distribution.
         bias_distribution: If True, adds bias terms to the density estimator.
         seed: The seed to use for the random number generator.
+        masks_kind: The kind of masks and orderings to use. ("random" or "repeat") (default: random)
         device: The device to use.
         dtype: The data type to use.
         safe_grad_hook: The function to use to hook the gradients (right after forward).
@@ -55,6 +56,7 @@ class MADE(torch.nn.Module):
         bias_distribution: bool = True,
         # general
         seed: int = 0,
+        masks_kind: str = "random",
         device: th.Optional[torch.device] = None,
         dtype: th.Optional[torch.dtype] = None,
         # grad safety
@@ -63,6 +65,7 @@ class MADE(torch.nn.Module):
         super().__init__()
         self.in_features = in_features
         self.num_masks = num_masks
+        self.masks_kind = masks_kind
         self.__mask_indicator = 0
         self.seed = seed
         self.current_seed = seed
@@ -168,19 +171,23 @@ class MADE(torch.nn.Module):
         Returns:
             None
         """
+        # if there is only one mask, do nothing except if initialization is True (to initialize layers' orderings)
         if self.num_masks == 1 and not initialization:
             return
+
+        # if mask_index is None, use next mask else use specified mask (and remember the original ordering)
         if self.__mask_indicator or mask_index is not None:
+            # each ordering corresponds to a random number generotor and a random seed
             self.generator = torch.Generator().manual_seed(
                 self.seed + (mask_index if mask_index is not None else self.__mask_indicator)
             )
-            if mask_index is not None:
+            if mask_index is not None:  # if mask_index is not None, we are initializing the mask[mask_index]
                 self.__mask_indicator = mask_index
+
+        # initialize inputs ordering (mask_index=0 is cannonical ordering the rest are random permutations)
         if not self.num_masks or self.__mask_indicator:
-
             self.ordering.data.copy_(torch.randperm(self.in_features, generator=self.generator))
-
-        if not self.__mask_indicator:
+        elif not self.__mask_indicator:
             self.ordering.data.copy_(torch.arange(self.in_features, dtype=torch.int, device=self.ordering.device))
             self.generator = torch.Generator().manual_seed(self.seed)
 
@@ -188,10 +195,14 @@ class MADE(torch.nn.Module):
             layer.reorder(
                 inputs_ordering=self.ordering if not i else self.layers[i - 1].ordering,
                 generator=self.generator,
+                # force ordering to be the same for all layers if masks_kind is repeat
+                ordering=self.ordering if self.masks_kind == "repeat" else None,
                 allow_detached_neurons=self.residual,
                 highest_ordering_label=self.in_features,
             )
         self.density_estimator.reorder(inputs_ordering=self.layers[-1].ordering, ordering=self.ordering)
+
+        # if mask_index is None, move to next mask for the next model.reorder() call
         if mask_index is None and not initialization:
             self.__mask_indicator = ((self.__mask_indicator + 1) % self.num_masks) if self.num_masks else 0
 
