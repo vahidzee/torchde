@@ -19,22 +19,24 @@ from .attack import PGDAttacker
 class MADETrainer(pl.LightningModule):
     def __init__(
         self,
-        model_cls: str = "made.MADE",
+        model_cls: th.Optional[str] = "made.MADE",
         model_args: th.Optional[dict] = None,
         criterion_args: th.Optional[dict] = None,
         attack_args: th.Optional[dict] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.model = get_value(self.hparams.model_cls)(
-            **(self.hparams.model_args or dict())
-        )
+        self.model = get_value(self.hparams.model_cls)(**(self.hparams.model_args or dict()))
+
+        # criterion and attacks can be different from the checkpointed model
         self.criterion = MADETrainingCriterion(
-            **(self.hparams.criterion_args or dict())
+            {**(self.hparams.criterion_args or dict()), **(criterion_args or dict())}
         )
         self.attacker = (
-            PGDAttacker(**self.hparams.attack_args)
-            if self.hparams.attack_args
+            PGDAttacker(
+                criterion=self.criterion, **{**(self.hparams.attack_args or dict()), **(attack_args or dict())}
+            )
+            if (self.hparams.attack_args or attack_args)
             else None
         )
 
@@ -50,16 +52,14 @@ class MADETrainer(pl.LightningModule):
     ):
         is_val = name == "val"
         inputs = batch[0] if isinstance(batch, (tuple, list)) else batch
-        
+
         if isinstance(self.model, MADE):
             # for mlp models
             inputs = inputs.reshape(inputs.shape[0], -1)
 
         torch.set_grad_enabled(not is_val)
         if self.attacker and not is_val:
-            adv_inputs, init_loss, final_loss = self.attacker(
-                model=self.model, inputs=inputs, return_loss=True
-            )
+            adv_inputs, init_loss, final_loss = self.attacker(model=self.model, inputs=inputs, return_loss=True)
             results = self.criterion(model=self.model, inputs=adv_inputs)
             results["adv/init_loss"] = init_loss
             results["adv/final_loss"] = final_loss
