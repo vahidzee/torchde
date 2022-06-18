@@ -17,6 +17,15 @@ from .attack import PGDAttacker
 
 
 class MADETrainer(pl.LightningModule):
+    """
+    Generic Lightning Module for training MADE models.
+
+    Attributes:
+        model: the MADE model (import path)
+        criterion: the criterion to use for training
+        attack: the attack to use for training
+    """
+
     def __init__(
         self,
         model_cls: th.Optional[str] = "made.MADE",
@@ -50,6 +59,17 @@ class MADETrainer(pl.LightningModule):
         optimizer_idx: th.Optional[int] = None,
         name: str = "train",
     ):
+        """Train or evaluate the model with the given batch.
+
+        Args:
+            batch: batch of data to train or evaluate with
+            batch_idx: index of the batch
+            optimizer_idx: index of the optimizer
+            name: name of the step ("train" or "val")
+
+        Returns:
+            None if the model is in evaluation mode, else a tensor with the training objective
+        """
         is_val = name == "val"
         inputs = batch[0] if isinstance(batch, (tuple, list)) else batch
 
@@ -78,7 +98,9 @@ class MADETrainer(pl.LightningModule):
         return results["loss"] if not is_val else None
 
     def training_step(self, batch, batch_idx, optimizer_idx=None):
+        "Pytorch Lightning's training_step function"
         return self.step(batch, batch_idx, optimizer_idx, name="train")
 
     def validation_step(self, batch, batch_idx, optimizer_idx=None):
+        "Pytorch Lightning's validation_step function"
         return self.step(batch, batch_idx, optimizer_idx, name="val")

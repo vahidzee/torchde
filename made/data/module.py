@@ -47,13 +47,13 @@ class DEDataModule(pl.LightningDataModule):
         super().__init__()
         # transforms
         transforms = transforms if transforms is not None else ToTensor()
-        self.train_transforms = initialize_transforms(
+        self.transforms_train = initialize_transforms(
             train_transforms if train_transforms is not None else transforms
         )
-        self.val_transforms = initialize_transforms(
+        self.transforms_val = initialize_transforms(
             val_transforms if val_transforms is not None else transforms
         )
-        self.test_transforms = initialize_transforms(
+        self.transforms_test = initialize_transforms(
             test_transforms if test_transforms is not None else transforms
         )
 
@@ -129,7 +129,7 @@ class DEDataModule(pl.LightningDataModule):
             dataset = self.get_dataset(
                 self.train_dataset,
                 train=True,
-                transform=self.train_transforms,
+                transform=self.transforms_train,
                 **self.train_dataset_args,
             )
             if not self.val_size:
@@ -149,21 +149,19 @@ class DEDataModule(pl.LightningDataModule):
             elif self.val_batch_size:
                 self.val_data = self.get_dataset(
                     self.val_dataset,
-                    transform=self.val_transforms,
+                    transform=self.transforms_val,
                     **self.val_dataset_args,
                 )
 
-            self.dims = self.train_data[0][0].shape
         elif stage == "test" and self.test_batch_size:
             self.test_data = (
                 self.get_dataset(
                     self.test_dataset,
-                    transform=self.test_transforms,
+                    transform=self.transforms_test,
                     train=False,
                     **self.test_dataset_args,
                 ),
             )
-            self.dims = self.test_data[0][0].shape
 
     def get_dataloader(
         self, name, batch_size=None, shuffle=None, num_workers=None, **params

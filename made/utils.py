@@ -2,6 +2,7 @@ import importlib
 import typing as th
 import types
 import inspect
+
 # for eval context
 import torch
 
@@ -9,12 +10,14 @@ import torch
 def safe_function_call_wrapper(function: th.Callable):
     signature = inspect.signature(function)
     params = signature.parameters
+
     def wrapper(*args, **kwargs):
         call_kwargs = {name: kwargs[name] for name in params if name in kwargs}
         return function(*args, **call_kwargs)
-    
+
     return wrapper
-        
+
+
 def generate_function(code_block, function: str) -> th.Callable[[th.Any], th.Any]:
     context = dict()
     exec(code_block, dict(), context)
@@ -36,9 +39,7 @@ def process_function_description(
     except SyntaxError:
         return generate_function(
             code_block=function if isinstance(function, str) else function["code"],
-            function=function.get("function", entry_function)
-            if isinstance(function, dict)
-            else entry_function,
+            function=function.get("entry", entry_function) if isinstance(function, dict) else entry_function,
         )
 
 
