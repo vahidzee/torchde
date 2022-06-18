@@ -89,10 +89,10 @@ class MADETrainingCriterion:
         return results if not return_factors else results, factors
 
     def __repr__(self):
-        regularizations = f"params_regularization={self.params_regularization}" if self.params_regularization else ""
+        regularizations = f"params_regularization={self.params_regularizations}" if self.params_regularizations else ""
         regularization_factors = (
-            f", params_regularization_factor={self.params_regularization_factors}"
-            if self.params_regularization_factors
+            f", params_regularization_factor={self.params_regularizations_factors}"
+            if self.params_regularizations_factors
             else ""
         )
         return f"{self.__class__.__name__}({regularizations}{regularization_factors})"
