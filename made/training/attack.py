@@ -30,15 +30,11 @@ class PGDAttacker:
 
     @functools.cached_property
     def generate_random_start(self):
-        return process_function_description(
-            self.random_start_generation_function_description, entry_function="process"
-        )
+        return process_function_description(self.random_start_generation_function, entry_function="process")
 
     @functools.cached_property
     def clamp_inputs(self):
-        return process_function_description(
-            self.inputs_clamp_function, entry_function="process"
-        )
+        return process_function_description(self.inputs_clamp_function, entry_function="process")
 
     def objective(self, model, inputs):
         criterion_results = self.criterion(model=model, inputs=inputs)
@@ -48,6 +44,7 @@ class PGDAttacker:
 
     @classmethod
     def renorm_adversary(
+        cls,
         adv_inputs,
         epsilon: th.Optional[float] = None,
         p_norm: th.Optional[th.Union[str, int]] = "inf",
@@ -79,16 +76,12 @@ class PGDAttacker:
             model.eval()
 
         for i in range(self.num_iters):
-            loss = self.objective(
-                self.criterion(model=model, inputs=inputs.detach() + delta)
-            ).mean()
+            loss = self.objective(model=model, inputs=inputs.detach() + delta)
             if i == 0 and return_loss:
                 init_loss = loss.detach()
             loss.backward()
             delta.data.copy_(delta.data + self.alpha * delta.grad.detach().sign())
-            delta.data.copy_(
-                self.renorm_adversary(delta, epsilon=self.epsilon, p_norm=self.p_norm)
-            )
+            delta.data.copy_(self.renorm_adversary(adv_inputs=delta, epsilon=self.epsilon, p_norm=self.p_norm))
             delta.grad.zero_()
         if return_loss:
             final_loss = self.objective(model=model, inputs=inputs.detach() + delta)
@@ -97,11 +90,11 @@ class PGDAttacker:
         unfreeze_params(model, params_state)
         # unforce eval
         if model_training:
-            self.train()
+            model.train()
         if return_loss:
             return (
-                self.inputs_clamp(inputs.detach() + delta.detach()),
+                self.clamp_inputs(inputs.detach() + delta.detach()),
                 init_loss,
                 final_loss,
             )
-        return self.inputs_clamp(inputs.detach() + delta.detach())
+        return self.clamp_inputs(inputs.detach() + delta.detach())
