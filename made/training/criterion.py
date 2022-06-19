@@ -48,7 +48,7 @@ class MADETrainingCriterion:
     def __call__(
         self, model: MADE, inputs, trainer=None, return_factors=False
     ) -> th.Union[ResultsDict, th.Tuple[ResultsDict, FactorsDict]]:
-        if not self.params_regularization:
+        if not self.params_regularization_functions:
             # shortcut for trainings with no parameter regularizations
             nll = -model.log_prob(inputs, reduce=True).mean()
             return dict(loss=nll, nll=nll) if not return_factors else (dict(loss=nll, nll=nll), dict())
@@ -59,7 +59,7 @@ class MADETrainingCriterion:
             model.reorder()
             params_logits = model(inputs)
             params = model.density_estimator.transform_distribution_parameters(params_logits)
-            for name, func in self.params_regularization.items():
+            for name, func in self.params_regularization_functions.items():
                 regularizations[name] += func(
                     params[name], trainer=trainer, model=model
                 ).mean()  # mean will ensure that regularization results are scalars

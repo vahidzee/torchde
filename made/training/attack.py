@@ -84,7 +84,7 @@ class PGDAttacker:
             delta.data.copy_(self.renorm_adversary(adv_inputs=delta, epsilon=self.epsilon, p_norm=self.p_norm))
             delta.grad.zero_()
         if return_loss:
-            final_loss = self.objective(model=model, inputs=inputs.detach() + delta)
+            final_loss = self.objective(model=model, inputs=inputs.detach() + delta).detach()
 
         # unfreezing model
         unfreeze_params(model, params_state)
