@@ -62,6 +62,7 @@ class PGDAttacker:
         return torch.where(norms > epsilon, adv_inputs * epsilon / norms, adv_inputs)
 
     def __call__(self, model, inputs, return_loss=True, force_eval: bool = True):
+        torch.set_grad_enabled(True)
         if self.random_start:
             delta = self.generate_random_start(inputs)
             delta.requires_grad = True

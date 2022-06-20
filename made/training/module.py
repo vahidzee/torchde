@@ -43,8 +43,8 @@ class MADETrainer(pl.LightningModule):
             model_args: the arguments to pass to the model constructor
             criterion_args: the arguments to pass to the criterion constructor (MADETrainingCriterion)
             attack_args: the arguments to pass to the attacker constructor (PGDAttacker)
-            inputs_transform: 
-                the transform function to apply to the inputs before forward pass, can be used for 
+            inputs_transform:
+                the transform function to apply to the inputs before forward pass, can be used for
                 applying dequantizations.
 
         Returns:
@@ -84,6 +84,16 @@ class MADETrainer(pl.LightningModule):
         "Placeholder forward pass for the model"
         self.model(inputs)
 
+    def process_inputs(self, batch):
+        "Process the inputs before forward pass"
+        inputs = batch[0] if isinstance(batch, (tuple, list)) else batch
+        inputs = self.inputs_transform_fucntion(inputs) if self.inputs_transform_fucntion else inputs
+        if isinstance(self.model, MADE):
+            # for mlp models
+            inputs = inputs.reshape(inputs.shape[0], -1)
+
+        return inputs
+
     def step(
         self,
         batch,
@@ -103,12 +113,8 @@ class MADETrainer(pl.LightningModule):
             None if the model is in evaluation mode, else a tensor with the training objective
         """
         is_val = name == "val"
-        inputs = batch[0] if isinstance(batch, (tuple, list)) else batch
-        inputs = self.inputs_transform_fucntion(inputs) if self.inputs_transform_fucntion else inputs
-        if isinstance(self.model, MADE):
-            # for mlp models
-            inputs = inputs.reshape(inputs.shape[0], -1)
-
+        inputs = self.process_inputs(batch)
+        
         torch.set_grad_enabled(not is_val)
         if self.attacker and not is_val:
             adv_inputs, init_loss, final_loss = self.attacker(model=self.model, inputs=inputs, return_loss=True)
