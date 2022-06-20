@@ -1,5 +1,6 @@
 import torch
 import typing as th
+import functools
 
 try:
     import pytorch_lightning as pl
@@ -11,7 +12,7 @@ except ModuleNotFoundError:
     import pytorch_lightning as pl
 
 from ..made import MADE
-from ..utils import get_value
+from ..utils import get_value, process_function_description
 from .criterion import MADETrainingCriterion
 from .attack import PGDAttacker
 
@@ -24,6 +25,7 @@ class MADETrainer(pl.LightningModule):
         model: the MADE model (import path)
         criterion: the criterion to use for training
         attack: the attack to use for training
+        inputs_transform: the transform to apply to the inputs before forward pass
     """
 
     def __init__(
@@ -32,7 +34,22 @@ class MADETrainer(pl.LightningModule):
         model_args: th.Optional[dict] = None,
         criterion_args: th.Optional[dict] = None,
         attack_args: th.Optional[dict] = None,
-    ):
+        inputs_transform: th.Optional[str] = None,
+    ) -> None:
+        """Initialize the trainer.
+
+        Args:
+            model_cls: the class of the model to use (import path)
+            model_args: the arguments to pass to the model constructor
+            criterion_args: the arguments to pass to the criterion constructor (MADETrainingCriterion)
+            attack_args: the arguments to pass to the attacker constructor (PGDAttacker)
+            inputs_transform: 
+                the transform function to apply to the inputs before forward pass, can be used for 
+                applying dequantizations.
+
+        Returns:
+            None
+        """
         super().__init__()
         self.save_hyperparameters()
         self.model = get_value(self.hparams.model_cls)(**(self.hparams.model_args or dict()))
@@ -48,8 +65,23 @@ class MADETrainer(pl.LightningModule):
             if (self.hparams.attack_args or attack_args)
             else None
         )
+        self.inputs_transform = inputs_transform
+
+    @functools.cached_property
+    def inputs_transform_fucntion(self):
+        """The transform function (callable) to apply to the inputs before forward pass.
+
+        Returns:
+            The compiled callable transform function if `self.inputs_transform` is provided else None
+        """
+        return (
+            process_function_description(self.inputs_transform, entry_function="transform")
+            if self.inputs_transform
+            else None
+        )
 
     def forward(self, inputs):
+        "Placeholder forward pass for the model"
         self.model(inputs)
 
     def step(
@@ -72,7 +104,7 @@ class MADETrainer(pl.LightningModule):
         """
         is_val = name == "val"
         inputs = batch[0] if isinstance(batch, (tuple, list)) else batch
-
+        inputs = self.inputs_transform_fucntion(inputs) if self.inputs_transform_fucntion else inputs
         if isinstance(self.model, MADE):
             # for mlp models
             inputs = inputs.reshape(inputs.shape[0], -1)
