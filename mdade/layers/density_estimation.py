@@ -101,7 +101,7 @@ class AutoRegressiveDensityEstimator1D(OrderedLinear):
         results = {
             name: (
                 params_logits[:, i]
-                if name not in self.distribution_params_transforms
+                if name not in self.distribution_params_transforms_functions
                 else self.distribution_params_transforms_functions[name](params_logits[:, i])
             )
             for i, name in enumerate(self.distribution_params_names)
