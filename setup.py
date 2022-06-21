@@ -9,7 +9,7 @@ import os
 # https://packaging.python.org/guides/single-sourcing-package-version/
 # http://blog.ionelmc.ro/2014/05/25/python-packaging/
 _PATH_ROOT = os.path.dirname(__file__)
-_PATH_MADE_SRC = os.path.join(_PATH_ROOT, "made")
+_PATH_MADE_SRC = os.path.join(_PATH_ROOT, "mdade")
 _PATH_REQUIREMENTS = os.path.join(_PATH_ROOT, "requirements")
 
 # read description
@@ -67,7 +67,7 @@ setup(
     author=_ABOUT_MODULE.__author__,
     author_email=_ABOUT_MODULE.__author_email__,
     url=_ABOUT_MODULE.__homepage__,
-    download_url="https://github.com/vahidzee/made",
+    download_url="https://github.com/vahidzee/mdade",
     license=_ABOUT_MODULE.__license__,
     long_description=long_description,  # same as readme
     long_description_content_type="text/markdown",
