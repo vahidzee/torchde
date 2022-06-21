@@ -6,7 +6,7 @@ __author__ = "Vahid Zehtab"
 __author_email__ = "vdzehtab@gmail.com"
 __license__ = "MIT"
 __copyright__ = f"Copyright (c) 2021-{_this_year}, {__author__}."
-__homepage__ = "https://github.com/vahidzee/made"
+__homepage__ = "https://github.com/vahidzee/mdade"
 # this has to be simple string, see: https://github.com/pypa/twine/issues/522
 __docs__ = "'mdade' offers a lightweight PyTorch toolbox for Masked Autoregressive models"
 
