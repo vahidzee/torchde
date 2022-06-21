@@ -4,7 +4,7 @@ from torchvision.transforms import ToTensor
 import torch
 from torch.utils.data import Dataset, random_split, DataLoader
 from .utils import initialize_transforms
-from ..utils import get_value
+from made.utils import get_value
 
 
 class DEDataModule(pl.LightningDataModule):

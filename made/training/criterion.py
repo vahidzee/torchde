@@ -1,8 +1,8 @@
 import typing as th
 import torch
 import functools
-from ..utils import process_function_description, safe_function_call_wrapper
-from ..made import MADE
+from made.utils import process_function_description, safe_function_call_wrapper
+from made.made import MADE
 
 # types
 FactorsDict = th.Dict[str, torch.Tensor]

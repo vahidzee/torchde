@@ -7,6 +7,7 @@ import inspect
 import torch
 
 
+
 def safe_function_call_wrapper(function: th.Callable):
     signature = inspect.signature(function)
     params = signature.parameters

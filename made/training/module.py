@@ -1,18 +1,9 @@
 import torch
 import typing as th
 import functools
-
-try:
-    import pytorch_lightning as pl
-except ModuleNotFoundError:
-    # install pytorch_lightning if it wasn't installed
-    import pip
-
-    pip.main(["install", "pytorch_lightning>=1.6"])
-    import pytorch_lightning as pl
-
-from ..made import MADE
-from ..utils import get_value, process_function_description
+import pytorch_lightning as pl
+from made.made import MADE
+from made.utils import get_value, process_function_description
 from .criterion import MADETrainingCriterion
 from .attack import PGDAttacker
 

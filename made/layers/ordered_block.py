@@ -2,7 +2,7 @@ import typing as th
 import torch
 from .ordered_linear import OrderedLinear
 from .ordered_residual import OrderedResidual1D
-from made.utils import get_value
+from ..utils import get_value
 
 
 class OrderedBlock(torch.nn.Module):

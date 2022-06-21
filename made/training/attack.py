@@ -1,7 +1,7 @@
 import torch
 import functools
 import typing as th
-from ..utils import process_function_description
+from made.utils import process_function_description
 from .utils import freeze_params, unfreeze_params
 
 
