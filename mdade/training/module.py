@@ -2,8 +2,8 @@ import torch
 import typing as th
 import functools
 import pytorch_lightning as pl
-from made.made import MADE
-from made.utils import get_value, process_function_description
+from mdade.made import MADE
+from mdade.utils import get_value, process_function_description
 from .criterion import MADETrainingCriterion
 from .attack import PGDAttacker
 
@@ -21,7 +21,7 @@ class MADETrainer(pl.LightningModule):
 
     def __init__(
         self,
-        model_cls: th.Optional[str] = "made.MADE",
+        model_cls: th.Optional[str] = "mdade.MADE",
         model_args: th.Optional[dict] = None,
         criterion_args: th.Optional[dict] = None,
         attack_args: th.Optional[dict] = None,

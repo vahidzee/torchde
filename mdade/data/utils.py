@@ -1,7 +1,7 @@
 import typing as th
 from numpy import isin
 from torchvision import transforms as tv_transforms
-from made.utils import get_value, process_function_description
+from mdade.utils import get_value, process_function_description
 import inspect
 
 

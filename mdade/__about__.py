@@ -8,7 +8,7 @@ __license__ = "MIT"
 __copyright__ = f"Copyright (c) 2021-{_this_year}, {__author__}."
 __homepage__ = "https://github.com/vahidzee/made"
 # this has to be simple string, see: https://github.com/pypa/twine/issues/522
-__docs__ = "'made' offers a lightweight PyTorch toolbox for Masked Deep Autoregressive models"
+__docs__ = "'mdade' offers a lightweight PyTorch toolbox for Masked Autoregressive models"
 
 __all__ = [
     "__author__",

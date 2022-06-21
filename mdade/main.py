@@ -1,7 +1,7 @@
 import torch
 from pytorch_lightning.utilities.cli import LightningCLI
-from made.training import MADETrainer
-from made.data import DEDataModule
+from mdade.training import MADETrainer
+from mdade.data import DEDataModule
 
 
 

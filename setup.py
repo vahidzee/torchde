@@ -58,9 +58,9 @@ _ABOUT_MODULE = _load_py_module(name="about", location=os.path.join(_PATH_MADE_S
 extras = {
     "tools": _load_requirements(path_dir=_PATH_REQUIREMENTS, file_name="tools.txt"),
 }
-print(_load_requirements(_PATH_REQUIREMENTS, "base.txt"))
+
 setup(
-    name="made",
+    name="mdade",
     packages=find_packages(include=["*"]),
     version=_ABOUT_MODULE.__version__,
     description=_ABOUT_MODULE.__docs__,
@@ -101,6 +101,6 @@ setup(
         "Programming Language :: Python :: 3.11",
     ],
     entry_points={
-        "console_scripts": ["made=made.main:main"],
+        "console_scripts": ["mdade=mdade.main:main"],
     },
 )
