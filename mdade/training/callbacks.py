@@ -190,7 +190,7 @@ class SampleCallback(pl.Callback):
     def __init__(
         self,
         num_samples: int = 8,
-        every_n_epochs: int = 5,
+        every_n_epochs: int = 1,
         reshape: th.Optional[th.Union[th.Union[int, int], list]] = None,
         grid_args: th.Optional[dict] = None,
         mask_index: th.Optional[int] = 0,

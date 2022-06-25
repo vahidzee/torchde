@@ -25,7 +25,16 @@ class MADETrainer(pl.LightningModule):
         model_args: th.Optional[dict] = None,
         criterion_args: th.Optional[dict] = None,
         attack_args: th.Optional[dict] = None,
-        inputs_transform: th.Optional[str] = None,
+        inputs_transform: str = None,
+        # optimization configs
+        optimizer: str = "torch.optim.Adam",
+        optimizer_args: th.Optional[dict] = None,
+        lr: float = 1e-4,
+        scheduler: th.Optional[str] = None,
+        scheduler_args: th.Optional[dict] = None,
+        scheduler_interval: str = "epoch",
+        scheduler_frequency: int = 1,
+        scheduler_monitor: th.Optional[str] = None,
     ) -> None:
         """Initialize the trainer.
 
@@ -57,6 +66,7 @@ class MADETrainer(pl.LightningModule):
             else None
         )
         self.inputs_transform = inputs_transform
+        self.lr = self.hparams.lr
 
     @functools.cached_property
     def inputs_transform_fucntion(self):
@@ -105,7 +115,7 @@ class MADETrainer(pl.LightningModule):
         """
         is_val = name == "val"
         inputs = self.process_inputs(batch)
-        
+
         torch.set_grad_enabled(not is_val)
         if self.attacker and not is_val:
             adv_inputs, init_loss, final_loss = self.attacker(model=self.model, inputs=inputs, return_loss=True)
@@ -125,6 +135,28 @@ class MADETrainer(pl.LightningModule):
                 sync_dist=True,
             )
         return results["loss"] if not is_val else None
+
+    def configure_optimizers(self):
+        opt_class, opt_dict = torch.optim.Adam, {"lr": self.lr}
+        if self.hparams.optimizer:
+            opt_class = get_value(self.hparams.optimizer)
+            opt_dict = self.hparams.optimizer_args or dict()
+            opt_dict["lr"] = self.lr
+        opt = opt_class(self.parameters(), **opt_dict)
+        if self.hparams.scheduler is None:
+            return opt
+        sched_class = get_value(self.hparams.scheduler)
+        sched_dict = self.hparams.scheduler_args or dict()
+        sched = sched_class(opt, **sched_dict)
+        sched_instance_dict = dict(
+            scheduler=sched,
+            interval=self.hparams.scheduler_interval,
+            frequency=self.hparams.scheduler_frequency,
+            reduce_on_plateau=isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau),
+        )
+        if self.hparams.scheduler_monitor:
+            sched_instance_dict["monitor"] = self.hparams.scheduler_monitor
+        return [opt], [sched_instance_dict]
 
     def training_step(self, batch, batch_idx, optimizer_idx=None):
         "Pytorch Lightning's training_step function"
