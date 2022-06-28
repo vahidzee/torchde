@@ -43,7 +43,7 @@ class MADE(torch.nn.Module):
         bias: bool = True,
         residual: bool = False,
         residual_scale: bool = True,
-        activation: th.Optional[str] = "torch.nn.GELU",
+        activation: th.Optional[str] = "torch.nn.ReLU",
         activation_args: th.Optional[dict] = None,
         batch_norm: bool = True,
         batch_norm_args: th.Optional[dict] = None,

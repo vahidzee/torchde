@@ -83,7 +83,7 @@ class MADETrainer(pl.LightningModule):
 
     def forward(self, inputs):
         "Placeholder forward pass for the model"
-        self.model(inputs)
+        return self.model(inputs)
 
     def process_inputs(self, batch):
         "Process the inputs before forward pass"
