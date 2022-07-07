@@ -1,22 +1,23 @@
 import torch
 import functools
 import typing as th
-from mdade.utils import process_function_description
+from torchde.utils import process_function_description, FunctionDescriptor
 from .utils import freeze_params, unfreeze_params
+from .criterion import Criterion
 
 
 class PGDAttacker:
     def __init__(
         self,
-        criterion,
+        criterion: th.Optional[Criterion] = None,
         criterion_roi: th.Union[str, th.List[str]] = "loss",
         num_iters: int = 1,
         alpha: float = 0.01,
         epsilon: th.Optional[float] = None,
         p_norm: str = "inf",
-        inputs_clamp="lambda x: torch.clamp(x, 0., 1.)",
+        inputs_clamp: FunctionDescriptor = "lambda x: torch.clamp(x, 0., 1.)",
         random_start: bool = True,
-        random_start_generation: str = "lambda x: (torch.rand_like(x) - 0.5) * 2",
+        random_start_generation: FunctionDescriptor = "lambda x: (torch.rand_like(x) - 0.5) * 2",
     ):
         self.criterion = criterion
         self.criterion_roi = criterion_roi
@@ -36,8 +37,22 @@ class PGDAttacker:
     def clamp_inputs(self):
         return process_function_description(self.inputs_clamp_function, entry_function="process")
 
-    def objective(self, model, inputs):
-        criterion_results = self.criterion(model=model, inputs=inputs)
+    def objective(
+        self,
+        *args,
+        inputs,
+        model: th.Optional[torch.nn.Module] = None,
+        training_module: th.Optional["pl.LightningModule"] = None,
+        **kwargs,
+    ):
+        model = model if model is not None else training_module.model
+        criterion_results = (self.criterion or training_module.criterion)(
+            *args,
+            inputs=inputs,
+            **kwargs,
+            training_module=training_module,
+            return_factors=False
+        )
         if isinstance(self.criterion_roi, str):
             return criterion_results[self.criterion_roi].mean()
         return sum(criterion_results[name] for name in self.criterion_roi).mean()
@@ -61,7 +76,16 @@ class PGDAttacker:
         )
         return torch.where(norms > epsilon, adv_inputs * epsilon / norms, adv_inputs)
 
-    def __call__(self, model, inputs, return_loss=True, force_eval: bool = True):
+    def __call__(
+        self,
+        *args,
+        inputs,
+        return_loss=True,
+        force_eval: bool = True,
+        model: th.Optional[torch.nn.Module] = None,
+        training_module: th.Optional["pl.LightningModule"] = None,
+        **kwargs,
+    ):
         torch.set_grad_enabled(True)
         if self.random_start:
             delta = self.generate_random_start(inputs)
@@ -77,7 +101,9 @@ class PGDAttacker:
             model.eval()
 
         for i in range(self.num_iters):
-            loss = self.objective(model=model, inputs=inputs.detach() + delta)
+            loss = self.objective(
+                *args, inputs=inputs.detach() + delta, **kwargs, training_module=training_module, model=model
+            )
             if i == 0 and return_loss:
                 init_loss = loss.detach()
             loss.backward()
@@ -85,7 +111,9 @@ class PGDAttacker:
             delta.data.copy_(self.renorm_adversary(adv_inputs=delta, epsilon=self.epsilon, p_norm=self.p_norm))
             delta.grad.zero_()
         if return_loss:
-            final_loss = self.objective(model=model, inputs=inputs.detach() + delta).detach()
+            final_loss = self.objective(
+                *args, inputs=inputs.detach() + delta, **kwargs, training_module=training_module, model=model
+            ).detach()
 
         # unfreezing model
         unfreeze_params(model, params_state)

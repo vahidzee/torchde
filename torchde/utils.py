@@ -6,6 +6,11 @@ import os
 
 # for eval context
 import torch
+import torchde
+
+# types
+CallableFunctionDescriptorStr = th.Union[str, th.Dict[str, th.Any]]
+FunctionDescriptor = th.Union[th.Callable, CallableFunctionDescriptorStr]
 
 
 def safe_function_call_wrapper(function: th.Callable):

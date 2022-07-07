@@ -3,7 +3,7 @@ import typing as th
 import functools
 import inspect
 from .ordered_linear import OrderedLinear
-from ..utils import process_function_description, get_value
+from torchde.utils import process_function_description, get_value
 
 
 class AutoRegressiveDensityEstimator1D(OrderedLinear):

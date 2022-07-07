@@ -2,13 +2,14 @@ import torch
 import typing as th
 import functools
 import pytorch_lightning as pl
-from mdade.made import MADE
-from mdade.utils import get_value, process_function_description
-from .criterion import MADETrainingCriterion
+from torchde.models import MADE
+from torchde.utils import get_value, process_function_description, FunctionDescriptor
+import torchmetrics
+from .criterion import Criterion
 from .attack import PGDAttacker
 
 
-class MADETrainer(pl.LightningModule):
+class DETrainingModule(pl.LightningModule):
     """
     Generic Lightning Module for training MADE models.
 
@@ -21,11 +22,17 @@ class MADETrainer(pl.LightningModule):
 
     def __init__(
         self,
-        model_cls: th.Optional[str] = "mdade.MADE",
+        # model
+        model: th.Optional[torch.nn.Module] = None,
+        model_cls: th.Optional[str] = None,
         model_args: th.Optional[dict] = None,
+        anomaly_detector_score: th.Optional[th.Union[str, FunctionDescriptor]] = None,
+        # criterion
+        criterion: th.Union[Criterion, str] = "torchde.training.criterion.Criterion",
         criterion_args: th.Optional[dict] = None,
+        # attacks
         attack_args: th.Optional[dict] = None,
-        inputs_transform: str = None,
+        inputs_transform: th.Optional[FunctionDescriptor] = None,
         # optimization configs
         optimizer: str = "torch.optim.Adam",
         optimizer_args: th.Optional[dict] = None,
@@ -52,12 +59,21 @@ class MADETrainer(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
-        self.model = get_value(self.hparams.model_cls)(**(self.hparams.model_args or dict()))
+        # initialize the model
+        self.model = (
+            model if model is not None else get_value(self.hparams.model_cls)(**(self.hparams.model_args or dict()))
+        )
+        # anomaly detection
 
         # criterion and attacks can be different from the checkpointed model
-        self.criterion = MADETrainingCriterion(
-            {**(self.hparams.criterion_args or dict()), **(criterion_args or dict())}
+        criterion = criterion if criterion is not None else self.hparams.criterion
+        criterion = get_value(criterion) if isinstance(criterion, str) else criterion
+        self.criterion = (
+            criterion
+            if isinstance(criterion, Criterion)
+            else criterion(**{**(self.hparams.criterion_args or dict()), **(criterion_args or dict())})
         )
+
         self.attacker = (
             PGDAttacker(
                 criterion=self.criterion, **{**(self.hparams.attack_args or dict()), **(attack_args or dict())}
@@ -67,6 +83,11 @@ class MADETrainer(pl.LightningModule):
         )
         self.inputs_transform = inputs_transform
         self.lr = self.hparams.lr
+
+        # metrics
+        if False:
+            self.val_auroc = torchmetrics.AUROC(num_classes=2, pos_label=1)
+            self.test_auroc = torchmetrics.AUROC(num_classes=2, pos_label=1)
 
     @functools.cached_property
     def inputs_transform_fucntion(self):
@@ -93,7 +114,7 @@ class MADETrainer(pl.LightningModule):
             # for mlp models
             inputs = inputs.reshape(inputs.shape[0], -1)
 
-        return inputs
+        return inputs, batch[1] if isinstance(batch, (tuple, list)) else None
 
     def step(
         self,
@@ -114,27 +135,43 @@ class MADETrainer(pl.LightningModule):
             None if the model is in evaluation mode, else a tensor with the training objective
         """
         is_val = name == "val"
-        inputs = self.process_inputs(batch)
+        inputs, labels = self.process_inputs(batch)
 
         torch.set_grad_enabled(not is_val)
         if self.attacker and not is_val:
-            adv_inputs, init_loss, final_loss = self.attacker(model=self.model, inputs=inputs, return_loss=True)
-            results = self.criterion(model=self.model, inputs=adv_inputs)
-            results["adv/init_loss"] = init_loss
-            results["adv/final_loss"] = final_loss
-            results["adv/loss_diff"] = final_loss - init_loss
+            adv_inputs, init_loss, final_loss = self.attacker(
+                model=self.model, training_module=self, inputs=inputs, return_loss=True
+            )
+            results, factors = self.criterion(
+                inputs=adv_inputs, training_module=self, return_factors=True
+            )
+            results["adversarial_attack/loss/initial"] = init_loss
+            results["adversarial_attack/loss/final"] = final_loss
+            results["adversarial_attack/loss/difference"] = final_loss - init_loss
         else:
-            results = self.criterion(model=self.model, inputs=inputs)
+            results, factors = self.criterion(inputs=inputs, training_module=self, return_factors=True)
         for item, value in results.items():
             self.log(
                 f"{item}/{name}",
-                value.mean(),
+                value.mean() if isinstance(value, torch.Tensor) else value,
+                on_step=not is_val,
+                on_epoch=is_val,
+                logger=True,
+                sync_dist=True,
+                prog_bar=is_val and name == "loss",
+            )
+        if is_val:
+            return
+        for item, value in factors.items():
+            self.log(
+                f"factors/{item}/{name}",
+                value.mean() if isinstance(value, torch.Tensor) else value,
                 on_step=not is_val,
                 on_epoch=is_val,
                 logger=True,
                 sync_dist=True,
             )
-        return results["loss"] if not is_val else None
+        return results["loss"]
 
     def configure_optimizers(self):
         opt_class, opt_dict = torch.optim.Adam, {"lr": self.lr}

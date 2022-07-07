@@ -2,7 +2,7 @@ import typing as th
 import torch
 from .ordered_linear import OrderedLinear
 from .ordered_residual import OrderedResidual1D
-from ..utils import get_value
+from torchde.utils import get_value
 
 
 class OrderedBlock(torch.nn.Module):
@@ -21,6 +21,8 @@ class OrderedBlock(torch.nn.Module):
         # residual
         residual: bool = True,
         residual_scale: bool = True,
+        residual_masked_connections: bool = True,
+        residual_factor: float = 1.0,
         # ordering args
         auto_connection: bool = True,
         # general parameters
@@ -49,6 +51,8 @@ class OrderedBlock(torch.nn.Module):
                 auto_connection=auto_connection,
                 device=device,
                 scale=residual_scale,
+                masked_connections=residual_masked_connections,
+                factor=residual_factor,
             )
             if residual
             else None

@@ -3,8 +3,8 @@ import typing as th
 from torchvision.transforms import ToTensor
 import torch
 from torch.utils.data import Dataset, random_split, DataLoader
-from .utils import initialize_transforms
-from mdade.utils import get_value
+from .utils import initialize_transforms, NormalDataset, IsNormalDataset
+from torchde.utils import get_value
 
 
 class DEDataModule(pl.LightningDataModule):
@@ -20,6 +20,8 @@ class DEDataModule(pl.LightningDataModule):
         val_dataset_args: th.Optional[dict] = None,
         test_dataset: th.Optional[th.Union[str, Dataset]] = None,
         test_dataset_args: th.Optional[dict] = None,
+        # normal/anomaly
+        normal_targets: th.Optional[th.List[int]] = None,
         # transforms
         transforms: th.Optional[th.Union[dict, th.Any]] = None,
         train_transforms: th.Optional[th.Union[dict, th.Any]] = None,
@@ -47,28 +49,19 @@ class DEDataModule(pl.LightningDataModule):
         super().__init__()
         # transforms
         transforms = transforms if transforms is not None else ToTensor()
-        self.transforms_train = initialize_transforms(
-            train_transforms if train_transforms is not None else transforms
-        )
-        self.transforms_val = initialize_transforms(
-            val_transforms if val_transforms is not None else transforms
-        )
-        self.transforms_test = initialize_transforms(
-            test_transforms if test_transforms is not None else transforms
-        )
+        self.transforms_train = initialize_transforms(train_transforms if train_transforms is not None else transforms)
+        self.transforms_val = initialize_transforms(val_transforms if val_transforms is not None else transforms)
+        self.transforms_test = initialize_transforms(test_transforms if test_transforms is not None else transforms)
 
         # seed
         self.seed = seed
-        # normal classes
 
         # data
         self.train_data, self.val_data, self.test_data = None, None, None
         self.train_dataset = train_dataset if train_dataset is not None else dataset
         self.val_size = val_size
         assert (
-            val_size is None
-            or isinstance(val_size, int)
-            or (isinstance(val_size, float) and val_size < 1)
+            val_size is None or isinstance(val_size, int) or (isinstance(val_size, float) and val_size < 1)
         ), "invalid validation size is provided (either int, float (between zero and one) or None)"
         self.val_dataset = val_dataset if val_dataset is not None else dataset
         self.test_dataset = test_dataset if test_dataset is not None else dataset
@@ -85,16 +78,13 @@ class DEDataModule(pl.LightningDataModule):
             **(test_dataset_args or dict()),
         }
 
+        # normal classes
+        self.normal_targets = normal_targets
+
         # batch_size
-        self.train_batch_size = (
-            train_batch_size if train_batch_size is not None else batch_size
-        )
-        self.val_batch_size = (
-            val_batch_size if val_batch_size is not None else batch_size
-        )
-        self.test_batch_size = (
-            test_batch_size if test_batch_size is not None else batch_size
-        )
+        self.train_batch_size = train_batch_size if train_batch_size is not None else batch_size
+        self.val_batch_size = val_batch_size if val_batch_size is not None else batch_size
+        self.test_batch_size = test_batch_size if test_batch_size is not None else batch_size
         assert (
             self.train_batch_size or self.val_batch_size or self.test_batch_size
         ), "at least one of batch_sizes should be a positive number"
@@ -107,15 +97,9 @@ class DEDataModule(pl.LightningDataModule):
         )
 
         # num_workers
-        self.train_num_workers = (
-            train_num_workers if train_num_workers is not None else num_workers
-        )
-        self.val_num_workers = (
-            val_num_workers if val_num_workers is not None else num_workers
-        )
-        self.test_num_workers = (
-            test_num_workers if test_num_workers is not None else num_workers
-        )
+        self.train_num_workers = train_num_workers if train_num_workers is not None else num_workers
+        self.val_num_workers = val_num_workers if val_num_workers is not None else num_workers
+        self.test_num_workers = test_num_workers if test_num_workers is not None else num_workers
 
     @staticmethod
     def get_dataset(dataset: th.Union[str, Dataset], **params):
@@ -125,7 +109,7 @@ class DEDataModule(pl.LightningDataModule):
             return get_value(dataset, strict=True)(**params)
 
     def setup(self, stage: th.Optional[str] = None) -> None:
-        if stage == "fit" and self.train_batch_size:
+        if (stage == "fit" or stage == "tune") and self.train_batch_size:
             dataset = self.get_dataset(
                 self.train_dataset,
                 train=True,
@@ -133,28 +117,38 @@ class DEDataModule(pl.LightningDataModule):
                 **self.train_dataset_args,
             )
             if not self.val_size:
-                self.train_data = dataset
+                # setup train data (in case validation is not to be a subset of provided dataset with val_size)
+                self.train_data = (
+                    dataset if self.normal_targets is None else NormalDataset(dataset, self.normal_targets)
+                )
             if self.val_size and self.val_batch_size:
+                # split dataset into train and val in case val_size is provided
                 train_len = (
                     len(dataset) - self.val_size
                     if isinstance(self.val_size, int)
                     else int(len(dataset) * (1 - self.val_size))
                 )
                 prng = torch.Generator()
-                prng.manual_seed(self.seed)
-                train_data, val_data = random_split(
-                    dataset, [train_len, len(dataset) - train_len], generator=prng
-                )
-                self.train_data, self.val_data = train_data, val_data
+                prng.manual_seed(self.seed)  # for reproducibility
+                train_data, val_data = random_split(dataset, [train_len, len(dataset) - train_len], generator=prng)
+                if self.normal_targets is not None:
+                    self.train_data, self.val_data = NormalDataset(train_data, self.normal_targets), IsNormalDataset(
+                        val_data, self.normal_targets
+                    )
+                else:
+                    self.train_data, self.val_data = train_data, val_data
             elif self.val_batch_size:
-                self.val_data = self.get_dataset(
+                val_data = self.get_dataset(
                     self.val_dataset,
                     transform=self.transforms_val,
                     **self.val_dataset_args,
                 )
+                self.val_data = (
+                    val_data if self.normal_targets is None else IsNormalDataset(val_data, self.normal_targets)
+                )
 
         elif stage == "test" and self.test_batch_size:
-            self.test_data = (
+            test_data = (
                 self.get_dataset(
                     self.test_dataset,
                     transform=self.transforms_test,
@@ -162,24 +156,17 @@ class DEDataModule(pl.LightningDataModule):
                     **self.test_dataset_args,
                 ),
             )
+            self.test_data = (
+                test_data if self.normal_targets is None else IsNormalDataset(test_data, self.normal_targets)
+            )
 
-    def get_dataloader(
-        self, name, batch_size=None, shuffle=None, num_workers=None, **params
-    ):
+    def get_dataloader(self, name, batch_size=None, shuffle=None, num_workers=None, **params):
         data = getattr(self, f"{name}_data")
         if data is None:
             return None
-        batch_size = (
-            batch_size
-            if batch_size is not None
-            else getattr(self, f"{name}_batch_size")
-        )
+        batch_size = batch_size if batch_size is not None else getattr(self, f"{name}_batch_size")
         shuffle = shuffle if shuffle is not None else getattr(self, f"{name}_shuffle")
-        num_workers = (
-            num_workers
-            if num_workers is not None
-            else getattr(self, f"{name}_num_workers")
-        )
+        num_workers = num_workers if num_workers is not None else getattr(self, f"{name}_num_workers")
         return DataLoader(
             dataset=data,
             batch_size=batch_size,

@@ -1,7 +1,7 @@
 import torch
 import typing as th
 import functools
-from .utils import process_function_description
+from torchde.utils import process_function_description
 from .layers import OrderedBlock, AutoRegressiveDensityEstimator1D
 
 
@@ -16,6 +16,8 @@ class MADE(torch.nn.Module):
         bias: If True, adds a bias term to linear computations.
         residual: If True, adds a residual connections.
         residual_scale: If True, scales the residual connection by the number of connections.
+        residual_factor: factor to scale the residual connection by.
+        residual_masked_connections: If True, adds a residual connection to every valid label.
         activation: The activation function to use (None for linear model).
         activation_args: The arguments to pass to the activation function.
         batch_norm: If True, adds a batch normalization layer in blocks.
@@ -43,6 +45,8 @@ class MADE(torch.nn.Module):
         bias: bool = True,
         residual: bool = False,
         residual_scale: bool = True,
+        residual_masked_connections: bool = True,
+        residual_factor: float = 1.0,
         activation: th.Optional[str] = "torch.nn.ReLU",
         activation_args: th.Optional[dict] = None,
         batch_norm: bool = True,
@@ -79,6 +83,8 @@ class MADE(torch.nn.Module):
                     bias=bias,
                     residual=residual,
                     residual_scale=residual_scale,
+                    residual_masked_connections=residual_masked_connections,
+                    residual_factor=residual_factor,
                     activation=activation,
                     activation_args=activation_args,
                     batch_norm=batch_norm,

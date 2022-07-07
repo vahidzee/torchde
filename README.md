@@ -1,13 +1,13 @@
-# Masked Deep Autoregressive models for Density Estimation
-Generic implementation of Masked Deep Autoregressive models for Density Estimation in [PyTorch](https://pytorch.org/) and [PytorchLightning](https://www.pytorchlightning.ai/). 
+# Torch Density Estimation
+Generic implementation of Deep Neural Networks for Density Estimation in [PyTorch](https://pytorch.org/) and [PytorchLightning](https://www.pytorchlightning.ai/). 
 
 ## Installation
-In order to network implementations install `mdade` via pip:
+In order to network implementations install `torchde` via pip:
 ```shell
-pip install mdade
+pip install torchde
 ```
 In case you wish to employ the training procedures and datamodule implementations (on top of `pytorch-lightning`), you would need to install the additional tools as well:
 
 ```shell
-pip install "mdade[tools]"
+pip install "torchde[tools]"
 ```
