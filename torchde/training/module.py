@@ -3,9 +3,9 @@ import typing as th
 import functools
 import pytorch_lightning as pl
 from torchde.models import MADE
-from torchde.utils import get_value, process_function_description, FunctionDescriptor
+from torchde.utils import get_value, process_function_description, safe_function_call_wrapper, FunctionDescriptor
 import torchmetrics
-from .criterion import Criterion
+from .criterion import Criterion, ResultsDict
 from .attack import PGDAttacker
 
 
@@ -26,13 +26,15 @@ class DETrainingModule(pl.LightningModule):
         model: th.Optional[torch.nn.Module] = None,
         model_cls: th.Optional[str] = None,
         model_args: th.Optional[dict] = None,
-        anomaly_detector_score: th.Optional[th.Union[str, FunctionDescriptor]] = None,
+        anomaly_detection_score: th.Optional[th.Union[str, FunctionDescriptor]] = None,
         # criterion
         criterion: th.Union[Criterion, str] = "torchde.training.criterion.Criterion",
         criterion_args: th.Optional[dict] = None,
         # attacks
         attack_args: th.Optional[dict] = None,
+        # input transforms
         inputs_transform: th.Optional[FunctionDescriptor] = None,
+        inputs_noise_eps: th.Optional[float] = None,
         # optimization configs
         optimizer: str = "torch.optim.Adam",
         optimizer_args: th.Optional[dict] = None,
@@ -64,6 +66,11 @@ class DETrainingModule(pl.LightningModule):
             model if model is not None else get_value(self.hparams.model_cls)(**(self.hparams.model_args or dict()))
         )
         # anomaly detection
+        self.anomaly_detection_score_description = anomaly_detection_score
+        if self.anomaly_detection_score_description is not None:
+            # anomaly detection metrics
+            self.val_auroc = torchmetrics.AUROC(num_classes=2, pos_label=1)
+            self.test_auroc = torchmetrics.AUROC(num_classes=2, pos_label=1)
 
         # criterion and attacks can be different from the checkpointed model
         criterion = criterion if criterion is not None else self.hparams.criterion
@@ -81,13 +88,18 @@ class DETrainingModule(pl.LightningModule):
             if (self.hparams.attack_args or attack_args)
             else None
         )
-        self.inputs_transform = inputs_transform
-        self.lr = self.hparams.lr
+        self.inputs_transform = inputs_transform if inputs_transform is not None else self.hparams.inputs_transform
+        self.lr = lr if lr is not None else self.hparams.lr
 
-        # metrics
-        if False:
-            self.val_auroc = torchmetrics.AUROC(num_classes=2, pos_label=1)
-            self.test_auroc = torchmetrics.AUROC(num_classes=2, pos_label=1)
+    @functools.cached_property
+    def anomaly_detection_score(self):
+        if self.anomaly_detection_score_description is None:
+            return None
+        if self.anomaly_detection_score_description in self.criterion.terms_names:
+            function = lambda criterion_results: criterion_results[self.anomaly_detection_score_description]
+        else:
+            function = process_function_description(self.anomaly_detection_score_description, entry_function="score")
+        return safe_function_call_wrapper(function)
 
     @functools.cached_property
     def inputs_transform_fucntion(self):
@@ -110,11 +122,59 @@ class DETrainingModule(pl.LightningModule):
         "Process the inputs before forward pass"
         inputs = batch[0] if isinstance(batch, (tuple, list)) else batch
         inputs = self.inputs_transform_fucntion(inputs) if self.inputs_transform_fucntion else inputs
+
         if isinstance(self.model, MADE):
             # for mlp models
             inputs = inputs.reshape(inputs.shape[0], -1)
 
         return inputs, batch[1] if isinstance(batch, (tuple, list)) else None
+
+    def log_step_results(self, results, factors, name: str = "train"):
+        "Log the results of the step"
+        is_val = name == "val"
+        # logging results
+        for item, value in results.items():
+            self.log(
+                f"{item}/{name}",
+                value.mean() if isinstance(value, torch.Tensor) else value,
+                on_step=not is_val,
+                on_epoch=is_val,
+                logger=True,
+                sync_dist=True,
+                prog_bar=is_val and name == "loss",
+            )
+        # validation step only logs
+        if not is_val:
+            return
+
+        # logging factors
+        for item, value in factors.items():
+            self.log(
+                f"factors/{item}/{name}",
+                value.mean() if isinstance(value, torch.Tensor) else value,
+                on_step=not is_val,
+                on_epoch=is_val,
+                logger=True,
+                sync_dist=True,
+            )
+
+    def anomaly_detection_step(self, inputs, labels, results: ResultsDict, name: str = "val", **kwargs):
+        is_val = name == "val"
+        if not is_val or self.anomaly_detection_score is None:
+            return results
+        scores = self.anomaly_detection_score(criterion_results=results, training_module=self, inputs=inputs, **kwargs)
+        self.val_auroc(
+            preds=scores.reshape(-1),  # auroc expects predictions to have higher values for the positive class
+            target=labels.reshape(-1),
+        )
+        normal_scores = scores[labels == 1]
+        anomaly_scores = scores[labels == 0]
+        if normal_scores.shape[0] != 0:
+            results["anomaly_detection/score/normal"] = normal_scores.mean()
+        if anomaly_scores.shape[0] != 0:
+            results["anomaly_detection/score/anomaly"] = anomaly_scores.mean()
+        results["metrics/auroc"] = self.val_auroc
+        return results
 
     def step(
         self,
@@ -122,6 +182,9 @@ class DETrainingModule(pl.LightningModule):
         batch_idx: th.Optional[int] = None,
         optimizer_idx: th.Optional[int] = None,
         name: str = "train",
+        inputs: th.Optional[th.Any] = None,
+        labels: th.Optional[th.Any] = None,
+        **kwargs,  # additional arguments to pass to the criterion and attacker
     ):
         """Train or evaluate the model with the given batch.
 
@@ -135,43 +198,31 @@ class DETrainingModule(pl.LightningModule):
             None if the model is in evaluation mode, else a tensor with the training objective
         """
         is_val = name == "val"
-        inputs, labels = self.process_inputs(batch)
+        if inputs is None:
+            inputs, labels = self.process_inputs(batch)
 
-        torch.set_grad_enabled(not is_val)
         if self.attacker and not is_val:
             adv_inputs, init_loss, final_loss = self.attacker(
-                model=self.model, training_module=self, inputs=inputs, return_loss=True
+                model=self.model, training_module=self, inputs=inputs, return_loss=True, **kwargs
             )
-            results, factors = self.criterion(
-                inputs=adv_inputs, training_module=self, return_factors=True
-            )
+
+        results, factors = self.criterion(
+            inputs=adv_inputs if self.attacker and not is_val else inputs,
+            training_module=self,
+            return_factors=True,
+            **kwargs,
+        )
+
+        # evaluate model's anomaly detection performance (only functional in validation steps)
+        results = self.anomaly_detection_step(inputs, labels, results, name)
+
+        # preparing results to be logged
+        if self.attacker and not is_val:
             results["adversarial_attack/loss/initial"] = init_loss
             results["adversarial_attack/loss/final"] = final_loss
             results["adversarial_attack/loss/difference"] = final_loss - init_loss
-        else:
-            results, factors = self.criterion(inputs=inputs, training_module=self, return_factors=True)
-        for item, value in results.items():
-            self.log(
-                f"{item}/{name}",
-                value.mean() if isinstance(value, torch.Tensor) else value,
-                on_step=not is_val,
-                on_epoch=is_val,
-                logger=True,
-                sync_dist=True,
-                prog_bar=is_val and name == "loss",
-            )
-        if is_val:
-            return
-        for item, value in factors.items():
-            self.log(
-                f"factors/{item}/{name}",
-                value.mean() if isinstance(value, torch.Tensor) else value,
-                on_step=not is_val,
-                on_epoch=is_val,
-                logger=True,
-                sync_dist=True,
-            )
-        return results["loss"]
+        self.log_step_results(results, factors, name)
+        return results["loss"] if not is_val else None
 
     def configure_optimizers(self):
         opt_class, opt_dict = torch.optim.Adam, {"lr": self.lr}

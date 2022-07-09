@@ -18,7 +18,7 @@ def initialize_transforms(transforms: th.Optional[th.Union[list, dict, th.Any]])
     # either a class and args, or a code block and entry function
     if isinstance(transforms, dict):
         if "class_path" in transforms:
-            return get_value(transforms["class_path"])(transforms.get("init_args", dict()))
+            return get_value(transforms["class_path"])(**transforms.get("init_args", dict()))
         value = process_function_description(transforms, "transform")
         return value() if inspect.isclass(value) else value
     if isinstance(transforms, str):
@@ -51,9 +51,7 @@ class NormalDataset(AnomallyBaseDataset):
     def __init__(self, original_dataset: torch.utils.data.Dataset, normal_targets: th.Optional[th.List] = None):
         super().__init__(normal_targets, relabel=False)
         self.dataset = (
-            original_dataset
-            if not isinstance(original_dataset, torch.utils.data.torch.utils.data.Subset)
-            else original_dataset.dataset
+            original_dataset if not isinstance(original_dataset, torch.utils.data.Subset) else original_dataset.dataset
         )
         self.indices = np.array(
             np.arange(len(original_dataset))

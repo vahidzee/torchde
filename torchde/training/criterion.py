@@ -2,7 +2,7 @@ import typing as th
 import torch
 import pytorch_lightning as pl
 import functools
-from torchde.training.terms import CriterionTerm
+from torchde.training.terms import CriterionTerm, TermDescriptor
 
 # types
 ResultsDict = th.Dict[str, torch.Tensor]
@@ -22,8 +22,8 @@ class Criterion:
 
     def __init__(
         self,
-        terms: th.List[th.Union[str, dict]],
-        regularizations: th.Optional[th.List[th.Union[str, dict]]] = None,
+        terms: th.List["TermDescriptor"] = None,
+        regularizations: th.Optional[th.List[TermDescriptor]] = None,
         terms_reduction: str = "sum",  # sum or multiply
         regularizations_reduction: str = "sum",  # sum or multiply
         overall_reduction: str = "sum",  # sum or multiply
@@ -84,6 +84,10 @@ class Criterion:
             return sum(factors_applied_values)
         elif reduction == "multiply":
             return functools.reduce(lambda x, y: x * y, factors_applied_values)
+
+    @property
+    def terms_names(self) -> th.List[str]:
+        return [term.name for term in self.terms + self.regularizations]
 
     def __call__(
         self,

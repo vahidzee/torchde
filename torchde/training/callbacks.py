@@ -1,7 +1,9 @@
+import functools
 import typing as th
 import torch
 import torchvision
 import pytorch_lightning as pl
+from torchde.utils import FunctionDescriptor, process_function_description, safe_function_call_wrapper
 
 
 class CheckOutlierCallback(pl.Callback):
@@ -15,20 +17,58 @@ class CheckOutlierCallback(pl.Callback):
         every_n_epochs (int): Check every n epochs
     """
 
-    def __init__(self, batch_size: int = 32, every_n_epochs: int = 1):
+    def __init__(
+        self,
+        inputs_shape: th.Union[tuple, list],
+        name: th.Optional[str] = None,
+        inputs_range: th.Union[tuple, list] = (-1.0, 1.0),
+        criterion: th.Optional[FunctionDescriptor] = None,
+        criterion_roi: th.Optional[th.Union[th.List[str], str]] = None,
+        batch_size: int = 32,
+        every_n_epochs: int = 1,
+    ):
         super().__init__()
+        self.name = f"{name}/" if name is not None else ""
         self.batch_size = batch_size
+        self.inputs_shape = tuple(inputs_shape)
         self.every_n_epochs = every_n_epochs
+        self.criterion_description = criterion
+        self.criterion_roi = criterion_roi
+        self.inputs_range = inputs_range
+
+    @functools.cached_property
+    def criterion_function(self):
+        if self.criterion_description is None:
+            return None
+        return safe_function_call_wrapper(
+            process_function_description(self.criterion_description, entry_function="criterion")
+        )
+
+    def criterion(self, inputs: torch.Tensor, trainer: pl.Trainer, pl_module: pl.LightningModule) -> torch.Tensor:
+        if self.criterion_function is None:
+            return pl_module.criterion(training_module=pl_module, model=pl_module.model, inputs=inputs)
+        return self.criterion_function(inputs=inputs, training_module=pl_module, trainer=trainer)
 
     def compute(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         with torch.no_grad():
-            pl_module.eval()
-            # todo: support non-mlp based models
-            rand_inputs = torch.rand(self.batch_size, pl_module.model.in_features, device=pl_module.device)
-            rand_out = pl_module.criterion(model=pl_module.model, inputs=rand_inputs)['loss']
-            pl_module.train()
-
-        trainer.logger.experiment.add_scalar("rand_nll", rand_out, global_step=trainer.global_step)
+            rand_inputs = torch.rand(self.batch_size, *self.inputs_shape, device=pl_module.device)
+            rand_inputs = rand_inputs * (self.inputs_range[1] - self.inputs_range[0]) + self.inputs_range[0]
+            results = self.criterion(pl_module=pl_module, trainer=trainer, inputs=rand_inputs)
+        if self.criterion_roi is None:
+            trainer.logger.experiment.add_scalar(
+                f"metrics/outliers/{self.name}score", results[self.criterion_roi], global_step=trainer.global_step
+            )
+        elif isinstance(self.criterion_roi, str):
+            trainer.logger.experiment.add_scalar(
+                f"metrics/outliers/{self.name}{self.criterion_roi}",
+                results[self.criterion_roi],
+                global_step=trainer.global_step,
+            )
+        else:
+            for roi in self.criterion_roi:
+                trainer.logger.experiment.add_scalar(
+                    f"metrics/outliers/{self.name}{roi}", results[roi], global_step=trainer.global_step
+                )
 
     def on_validation_epoch_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         if trainer.current_epoch % self.every_n_epochs:
@@ -38,9 +78,6 @@ class CheckOutlierCallback(pl.Callback):
 
 class SampleAdversariesCallback(pl.Callback):
     """Evaluate the model by sampling adversarial examples.
-
-    If the training loss stays constant across iterations, this score is likely to show
-     the progress of the model in detecting "outliers".
 
     Attributes:
         dataloader (str): dataloader (val/train/test) to use for initial inputs
@@ -173,4 +210,3 @@ class SampleAdversariesCallback(pl.Callback):
                 ),
                 global_step=trainer.global_step,
             )
-
