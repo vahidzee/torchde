@@ -115,6 +115,7 @@ class SGLDLogSamplesCallback(pl.Callback):
                 inputs_value_range=self.inputs_value_range,
                 energy_function=self.energy_function,
                 update_buffer=False,
+                device=pl_module.device,
             )
         else:
             samples = SGLDSampler.generate_samples(
@@ -129,5 +130,6 @@ class SGLDLogSamplesCallback(pl.Callback):
                 inputs_value_range=self.inputs_value_range,
                 energy_function=self.energy_function,
                 training_module=pl_module,
+                device=pl_module.device,
             )
         return samples
