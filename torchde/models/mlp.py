@@ -38,6 +38,7 @@ class MLP(torch.nn.Module):
         batch_norm: bool = True,
         batch_norm_args: th.Optional[dict] = None,
         # general
+        force_reshape_inputs: bool = False,
         device: th.Optional[torch.device] = None,
         dtype: th.Optional[torch.dtype] = None,
         # grad safety
@@ -67,14 +68,18 @@ class MLP(torch.nn.Module):
         self.final_layer = torch.nn.Linear(
             in_features=layers[-1], out_features=out_features, bias=bias, device=device, dtype=dtype
         )
+        self.force_reshape_inputs = force_reshape_inputs
         self.safe_grad_hook = safe_grad_hook
 
     @functools.cached_property
     def safe_grad_hook_function(self):
         return process_function_description(self.safe_grad_hook, entry_function="hook")
 
-    def forward(self, inputs, safe_grad: bool = True):
-        results = self.final_layer(self.layers(inputs))
+    def forward(self, inputs, safe_grad: bool = True, force_reshape_inputs: th.Optional[bool] = None):
+        force_reshape_inputs = force_reshape_inputs if force_reshape_inputs is not None else self.force_reshape_inputs
+        results = self.final_layer(
+            self.layers(inputs if not force_reshape_inputs else inputs.reshape(inputs.shape[0], -1))
+        )
         if results.requires_grad and safe_grad:
             results.register_hook(self.safe_grad_hook_function)
         return results

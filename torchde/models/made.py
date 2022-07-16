@@ -31,6 +31,7 @@ class MADE(torch.nn.Module):
         bias_distribution: If True, adds bias terms to the density estimator.
         seed: The seed to use for the random number generator.
         masks_kind: The kind of masks and orderings to use. ("random" or "repeat") (default: random)
+        force_reshape_inputs: If True, reshape inputs to the shape (batch_size, -1).
         device: The device to use.
         dtype: The data type to use.
         safe_grad_hook: The function to use to hook the gradients (right after forward).
@@ -61,6 +62,7 @@ class MADE(torch.nn.Module):
         # general
         seed: int = 0,
         masks_kind: str = "random",
+        force_reshape_inputs: bool = True,
         device: th.Optional[torch.device] = None,
         dtype: th.Optional[torch.dtype] = None,
         # grad safety
@@ -110,7 +112,7 @@ class MADE(torch.nn.Module):
 
         self.register_buffer("ordering", torch.arange(self.in_features, dtype=torch.int, device=device))
         self.safe_grad_hook = safe_grad_hook
-
+        self.force_reshape_inputs = force_reshape_inputs
         self.reorder(initialization=True)
 
     @functools.cached_property
@@ -212,9 +214,18 @@ class MADE(torch.nn.Module):
         if mask_index is None and not initialization:
             self.__mask_indicator = ((self.__mask_indicator + 1) % self.num_masks) if self.num_masks else 0
 
-    def forward(self, inputs, mask_index: th.Optional[int] = None, safe_grad: bool = True):
+    def forward(
+        self,
+        inputs,
+        mask_index: th.Optional[int] = None,
+        safe_grad: bool = True,
+        force_reshape_inputs: th.Optional[bool] = None,
+    ):
+        force_reshape_inputs = force_reshape_inputs if force_reshape_inputs is not None else self.force_reshape_inputs
         if mask_index is None:
-            results = self.density_estimator(self.layers(inputs))
+            results = self.density_estimator(
+                self.layers(inputs if not force_reshape_inputs else inputs.reshape(inputs.shape[0], -1))
+            )
             if results.requires_grad and safe_grad:
                 results.register_hook(self.safe_grad_hook_function)
             return results
