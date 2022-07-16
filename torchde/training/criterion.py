@@ -69,10 +69,16 @@ class Criterion:
         terms: th.Union[str, th.List[CriterionTerm]] = "terms",
         **kwargs,
     ):
-        return {
-            term.name: term(*args, inputs=inputs, training_module=training_module, **kwargs)
-            for term in (getattr(self, terms) if isinstance(terms, str) else terms)
-        }
+        results = {}
+        for term in getattr(self, terms) if isinstance(terms, str) else terms:
+            term_results = term(*args, inputs=inputs, training_module=training_module, **kwargs)
+            if isinstance(term_results, dict):
+                for name in term_results:
+                    # for loss, use the term name since it is the overall term value and should be reduced together with other terms
+                    results[f"{term.name}/{name}" if name != "loss" else term.name] = term_results[name]
+            else:
+                results[term.name] = term_results
+        return results
 
     def reduce(self, term_results: ResultsDict, factors_dict: FactorsDict, terms_name: str = "terms") -> torch.Tensor:
         reduction = getattr(self, f"{terms_name}_reduction")
