@@ -14,6 +14,7 @@ class MADENLLTerm(CriterionTerm):
         training_module: pl.LightningModule,
         params_logits: th.Optional[torch.Tensor] = None,
         params: th.Optional[dict] = None,
+        **kwargs,
     ):
         model = training_module.model
         if params_logits is None and params is None:
@@ -33,6 +34,7 @@ class MADEEntropyTerm(CriterionTerm):
         training_module: pl.LightningModule,
         params_logits: th.Optional[torch.Tensor] = None,
         params: th.Optional[dict] = None,
+        **kwargs,
     ):
         model = training_module.model
         if params_logits is None and params is None:
