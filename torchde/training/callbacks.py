@@ -164,8 +164,8 @@ class SampleAdversariesCallback(pl.Callback):
         """
         while True:
             for batch in self.dataloader:
-                results = pl_module.process_inputs(batch).to(pl_module.device)
-                yield results
+                inputs, labels = pl_module.process_inputs(batch)
+                yield inputs.to(pl_module.device)
 
     def get_adversaries(
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, inputs: torch.Tensor
@@ -180,7 +180,7 @@ class SampleAdversariesCallback(pl.Callback):
         Returns:
             Tensor of adversarial inputs
         """
-        return pl_module.attacker(inputs=inputs, model=pl_module.model, return_loss=False)
+        return pl_module.attacker(inputs=inputs, training_module=pl_module, return_loss=False)
 
     def on_train_epoch_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         if (

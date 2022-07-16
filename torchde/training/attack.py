@@ -15,9 +15,9 @@ class PGDAttacker:
         alpha: float = 0.01,
         epsilon: th.Optional[float] = None,
         p_norm: str = "inf",
-        inputs_clamp: FunctionDescriptor = "lambda x: torch.clamp(x, 0., 1.)",
+        inputs_clamp: FunctionDescriptor = None,
         random_start: bool = True,
-        random_start_generation: FunctionDescriptor = "lambda x: (torch.rand_like(x) - 0.5) * 2",
+        random_start_generation: FunctionDescriptor = "torch.randn_like",
     ):
         self.criterion = criterion
         self.criterion_roi = criterion_roi
@@ -35,6 +35,8 @@ class PGDAttacker:
 
     @functools.cached_property
     def clamp_inputs(self):
+        if self.inputs_clamp_function is None:
+            return lambda inputs: inputs
         return process_function_description(self.inputs_clamp_function, entry_function="process")
 
     def objective(
@@ -45,13 +47,10 @@ class PGDAttacker:
         training_module: th.Optional["pl.LightningModule"] = None,
         **kwargs,
     ):
-        model = model if model is not None else training_module.model
+        if model is None:
+            model = training_module.model if hasattr(training_module, "model") else training_module
         criterion_results = (self.criterion or training_module.criterion)(
-            *args,
-            inputs=inputs,
-            **kwargs,
-            training_module=training_module,
-            return_factors=False
+            *args, inputs=inputs, **kwargs, training_module=training_module, return_factors=False, model=model
         )
         if isinstance(self.criterion_roi, str):
             return criterion_results[self.criterion_roi].mean()
@@ -94,7 +93,9 @@ class PGDAttacker:
             delta = torch.zeros_like(inputs, requires_grad=True)
 
         # freezing model params
-        params_state = freeze_params(model)
+        model = model if model is not None else training_module
+        if model is not None:
+            params_state = freeze_params(model)
         # force eval
         model_training = model.training
         if force_eval:
@@ -116,14 +117,15 @@ class PGDAttacker:
             ).detach()
 
         # unfreezing model
-        unfreeze_params(model, params_state)
+        if model is not None:
+            unfreeze_params(model, params_state)
         # unforce eval
         if model_training:
             model.train()
         if return_loss:
             return (
-                self.clamp_inputs(inputs.detach() + delta.detach()),
+                self.clamp_inputs(inputs + delta.detach()),
                 init_loss,
                 final_loss,
             )
-        return self.clamp_inputs(inputs.detach() + delta.detach())
+        return self.clamp_inputs(inputs + delta.detach())
