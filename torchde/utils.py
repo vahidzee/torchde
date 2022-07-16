@@ -94,8 +94,8 @@ def greedy_import_context(name, upwards: bool = False):
     return imported_module, ".".join(module_hierarchy[trial_index:])
 
 
-def __get_value(name: str, strict: bool = True, upwards=True):
-    var, name = greedy_import_context(name, upwards=upwards)
+def __get_value(name: str, strict: bool = True, upwards=True, context=None):
+    var, name = greedy_import_context(name, upwards=upwards) if context is None else (context, name)
     for split in name.split(".") if name else []:
         if isinstance(var, dict):
             if split not in var:
@@ -114,18 +114,18 @@ def __get_value(name: str, strict: bool = True, upwards=True):
     return var
 
 
-def get_value(name, prefer_modules: bool = False, strict: bool = True):
+def get_value(name, prefer_modules: bool = False, strict: bool = True, context=None):
     results = []
     try:
-        results.append(__get_value(name, upwards=True, strict=strict))
+        results.append(__get_value(name, upwards=True, strict=strict, context=context))
     except:
         pass
     try:
-        results.append(__get_value(name, upwards=False, strict=strict))
+        results.append(__get_value(name, upwards=False, strict=strict, context=context))
     except:
         pass
     if not results:
-        raise ImportError(name=name)
+        raise ImportError(name)
     if len(results) == 1:
         return results[0]
 
@@ -140,3 +140,17 @@ def get_value(name, prefer_modules: bool = False, strict: bool = True):
         return results[1] if inspect.ismodule(results[1]) else results[0]
     else:
         return results[0]
+
+
+def args_list_len(*args):
+    return max(len(arg) if isinstance(arg, (tuple, list)) else (1 if arg is not None else 0) for arg in args)
+
+
+def list_args(*args, length: th.Optional[int] = None, return_length: bool = False):
+    length = args_list_len(*args) if length is None else length
+    if not length:
+        results = args if len(args) > 1 else args[0]
+        return results if not return_length else (results, length)
+    results = [([arg] * length if not isinstance(arg, (tuple, list)) else arg) for arg in args]
+    results = results if len(args) > 1 else results[0]
+    return results if not return_length else (results, length)
