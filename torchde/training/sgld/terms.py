@@ -15,6 +15,7 @@ class SGLDContrastiveDivergenceTerm(CriterionTerm):
         training_module: pl.LightningModule,
         inputs_out: th.Optional[torch.Tensor] = None,
         samples_out: th.Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         if samples_out is not None and inputs_out is not None:
             return samples_out.mean() - inputs_out.mean()
@@ -36,6 +37,7 @@ class SGLDScoreRegularizationTerm(CriterionTerm):
         training_module: pl.LightningModule,
         inputs_out: th.Optional[torch.Tensor] = None,
         samples_out: th.Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         if samples_out is not None and inputs_out is not None:
             return (samples_out**2 + inputs_out**2).mean()

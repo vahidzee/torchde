@@ -53,9 +53,23 @@ class SGLDTrainingModule(DETrainingModule):
         self.sampler = SGLDSampler(model=self.model, **(sampler_args or self.hparams.sampler_args or {}))
 
     def step(
-        self, batch, batch_idx: th.Optional[int] = None, optimizer_idx: th.Optional[int] = None, name: str = "train"
+        self,
+        batch: th.Optional[th.Any] = None,
+        batch_idx: th.Optional[int] = None,
+        optimizer_idx: th.Optional[int] = None,
+        name: str = "train",
+        inputs: th.Optional[th.Any] = None,
+        labels: th.Optional[th.Any] = None,
+        transform_inputs: bool = True,
+        transform_labels: bool = True,
+        return_results: bool = False,
+        return_factors: bool = False,
+        log_results: bool = True,
+        **kwargs,  # additional arguments to pass to the criterion and attacker
     ):
-        inputs, labels = self.process_inputs(batch)
+        inputs, labels = self.process_inputs(
+            batch, inputs=inputs, labels=labels, transform_inputs=transform_inputs, transform_labels=transform_labels
+        )
         samples = self.sampler.sample(sample_size=inputs.shape[0], update_buffer=name == "val", device=inputs.device)
         return super().step(
             batch=batch,
@@ -64,5 +78,11 @@ class SGLDTrainingModule(DETrainingModule):
             name=name,
             inputs=inputs,
             labels=labels,
+            transform_inputs=False,
+            transform_labels=False,
+            return_results=return_results,
+            return_factors=return_factors,
+            log_results=log_results,
             samples=samples,
+            **kwargs,
         )
