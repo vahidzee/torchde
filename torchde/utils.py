@@ -80,11 +80,13 @@ def importer(name):
         return foo
 
 
-def greedy_import_context(name, upwards: bool = False):
+def greedy_import_context(name, upwards: bool = False, level: int = 0):
     module_hierarchy = name.split(".")
     imported_module = None
     for trial_index in range(
-        1 if upwards else len(module_hierarchy), len(module_hierarchy) + 1 if upwards else -1, 1 if upwards else -1
+        1 if upwards else len(module_hierarchy) - level,
+        (len(module_hierarchy) + 1 - level) if upwards else -1,
+        1 if upwards else -1,
     ):
         try:
             imported_module = importer(".".join(module_hierarchy[:trial_index]))
@@ -140,6 +142,21 @@ def get_value(name, prefer_modules: bool = False, strict: bool = True, context=N
         return results[1] if inspect.ismodule(results[1]) else results[0]
     else:
         return results[0]
+
+
+def set_value(name, value, context=None):
+    var, name = greedy_import_context(name, upwards=True, level=1) if context is None else (context, name)
+    for split in name.split(".")[:-1] if name else []:
+        if isinstance(var, dict):
+            var = var[split]
+        elif isinstance(var, list):
+            var = var[int(split)]
+        else:
+            var = getattr(var, split)
+    if isinstance(var, dict):
+        var[name.split(".")[-1]] = value
+    else:
+        setattr(var, name.split(".")[-1], value)
 
 
 def args_list_len(*args):
