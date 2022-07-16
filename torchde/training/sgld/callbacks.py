@@ -28,7 +28,7 @@ class SGLDLogSamplerBufferCallback(pl.Callback):
         self.every_n_epochs = every_n_epochs
         self.grid_args = grid_args or {}
 
-    def on_epoch_end(self, trainer, pl_module):
+    def on_train_epoch_start(self, trainer, pl_module):
         """
         Automatically gets called upon the ending of each training epoch
 
@@ -59,6 +59,7 @@ class SGLDLogSamplesCallback(pl.Callback):
         noise_eps: th.Optional[int] = None,
         grad_clamp: th.Optional[th.Union[tuple, list]] = None,
         inputs_value_range: th.Optional[th.Union[tuple, list]] = None,
+        inputs_shape: th.Optional[th.Union[tuple, list]] = None,
         energy_function: th.Optional[FunctionDescriptor] = None,
         buffer_replay_prob: th.Optional[float] = None,
     ):
@@ -75,6 +76,7 @@ class SGLDLogSamplesCallback(pl.Callback):
         self.noise_eps = noise_eps
         self.grad_clamp = grad_clamp
         self.buffer_replay_prob = buffer_replay_prob
+        self.inputs_shape = tuple(inputs_shape) if inputs_shape is not None else None
         self.inputs_value_range = tuple(inputs_value_range) if inputs_value_range else None
 
     @functools.cached_property
@@ -85,7 +87,7 @@ class SGLDLogSamplesCallback(pl.Callback):
             process_function_description(self.energy_function_descriptor, entry_function="energy")
         )
 
-    def on_epoch_end(self, trainer, pl_module):
+    def on_validation_epoch_start(self, trainer, pl_module):
         if trainer.current_epoch % self.every_n_epochs:
             return
         samples = self.generate_imgs(pl_module)
@@ -95,12 +97,12 @@ class SGLDLogSamplesCallback(pl.Callback):
                 f"SGLDSampler/{self.name}samples", grid, global_step=trainer.global_step
             )
             return
-
-        for i in range(samples.shape[1]):
-            grid = torchvision.utils.make_grid(samples[:, i], **self.grid_args)
-            trainer.logger.experiment.add_image(
-                f"SGLDSampler/{self.name}generation/{i}", grid, global_step=trainer.current_epoch
-            )
+        grid = torchvision.utils.make_grid(
+            samples.reshape(-1, *samples.shape[2:]),**{"nrow": samples.shape[0], **self.grid_args}
+        )
+        trainer.logger.experiment.add_image(
+            f"SGLDSampler/{self.name}generation", grid, global_step=trainer.global_step
+        )
 
     def generate_imgs(self, pl_module):
         if hasattr(pl_module, "sampler"):
@@ -120,6 +122,9 @@ class SGLDLogSamplesCallback(pl.Callback):
         else:
             samples = SGLDSampler.generate_samples(
                 model=pl_module,
+                init_inputs=SGLDSampler.generate_rand_inputs(
+                    self.num_samples, self.inputs_shape, self.inputs_value_range
+                ),
                 sample_size=self.num_samples,
                 num_steps=self.num_steps,
                 step_size=self.step_size,

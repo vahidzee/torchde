@@ -61,11 +61,16 @@ class SGLDSampler:
             torchde.utils.process_function_description(self.energy_function_descriptor, entry_function="energy")
         )
 
-    def generate_rand_inputs(self, num_samples: int):
-        uniform_samples = torch.rand((num_samples,) + self.inputs_shape)
-        if self.inputs_value_range is None:
+    @staticmethod
+    def generate_rand_inputs(
+        num_samples: int,
+        inputs_shape: th.Optional[th.Union[tuple, list]] = None,
+        inputs_value_range: th.Optional[th.Union[tuple, list]] = None,
+    ) -> torch.Tensor:
+        uniform_samples = torch.rand((num_samples,) + inputs_shape)
+        if inputs_value_range is None:
             return uniform_samples
-        return uniform_samples * (self.inputs_value_range[1] - self.inputs_value_range[0]) + self.inputs_value_range[0]
+        return uniform_samples * (inputs_value_range[1] - inputs_value_range[0]) + inputs_value_range[0]
 
     def sample(
         self,
@@ -102,11 +107,13 @@ class SGLDSampler:
         # choose buffer_replay_prob * 100% of the batch from the buffer, generate the rest from scratch
         if buffer_replay_prob:
             n_new = np.random.binomial(sample_size, 1 - buffer_replay_prob)
-            rand_inputs = self.generate_rand_inputs(n_new)
+            rand_inputs = self.generate_rand_inputs(n_new, self.inputs_shape, self.inputs_value_range)
             old_inputs = torch.cat(random.choices(self.buffer, k=sample_size - n_new), dim=0)
             starting_samples = torch.cat([rand_inputs, old_inputs], dim=0).detach().to(device)
         else:
-            starting_samples = self.generate_rand_inputs(sample_size).detach().to(device)
+            starting_samples = (
+                self.generate_rand_inputs(sample_size, self.inputs_shape, self.inputs_value_range).detach().to(device)
+            )
         # perform MCMC sampling
         samples = SGLDSampler.generate_samples(
             model=self.model,
@@ -137,7 +144,7 @@ class SGLDSampler:
         inputs_value_range: th.Optional[th.Union[tuple, float]] = (-1.0, 1.0),
         grad_clamp: th.Optional[th.Union[tuple, float]] = (-0.03, 0.03),
         return_samples_per_step: th.Optional[th.Union[int, bool]] = False,
-        force_eval: bool = False,
+        force_eval: bool = True,
         **kwargs
     ):
         """
