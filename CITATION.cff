@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: '"torchde": PyTorch Density Estimation'
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Vahid
+    family-names: Zehtab
+    email: vdzehtab@gmail.com
+repository-code: "https://github.com/vahidzee/torchde/"
+abstract: >-
+  A lightweight PyTorch wrapper for deep density
+  estimation models.
+keywords:
+  - Machine Learning
+  - Deep Learning
+  - Density Estimation
+  - Anomaly Detection
+license: MIT
+date-released: "2022-07-01"

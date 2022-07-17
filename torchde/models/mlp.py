@@ -38,7 +38,7 @@ class MLP(torch.nn.Module):
         batch_norm: bool = True,
         batch_norm_args: th.Optional[dict] = None,
         # general
-        force_reshape_inputs: bool = False,
+        force_reshape_inputs: bool = True,
         device: th.Optional[torch.device] = None,
         dtype: th.Optional[torch.dtype] = None,
         # grad safety
