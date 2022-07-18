@@ -5,6 +5,7 @@ from torchde.training.module import DETrainingModule
 from torchde.training.criterion import Criterion
 from torchde.training.module import DETrainingModule
 import torchde.utils
+from torchde.utils import FunctionDescriptor
 
 
 class EDETrainingModule(DETrainingModule):
@@ -17,18 +18,20 @@ class EDETrainingModule(DETrainingModule):
         de_model: th.Optional[DETrainingModule] = None,
         de_model_cls: th.Optional[str] = None,
         de_model_args: th.Optional[dict] = None,
-        anomaly_detection_score: th.Optional[th.Union[str, torchde.utils.FunctionDescriptor]] = None,
+        # anomaly detection
+        anomaly_detection_score: th.Optional[th.Union[str, FunctionDescriptor]] = None,
         # criterion
         criterion: th.Optional[th.Union[Criterion, str]] = "torchde.training.encoding.criterion.EDETrainingCriterion",
         criterion_args: th.Optional[dict] = None,
         # attacks
         attack_args: th.Optional[dict] = None,
         # input transforms
-        inputs_transform: th.Optional[torchde.utils.FunctionDescriptor] = None,
+        inputs_transform: th.Optional[FunctionDescriptor] = None,
         inputs_noise_eps: th.Optional[float] = None,
-        labels_transform: th.Optional[torchde.utils.FunctionDescriptor] = None,
+        labels_transform: th.Optional[FunctionDescriptor] = None,
         # optimization configs
         optimizer: str = "torch.optim.Adam",
+        optimizer_is_active: th.Optional[th.Union[FunctionDescriptor, th.List[FunctionDescriptor]]] = None,
         optimizer_parameters: th.Optional[th.Union[th.List[str], str]] = ("encoder", "density_estimator"),
         optimizer_args: th.Optional[dict] = None,
         # learning rate
@@ -61,6 +64,7 @@ class EDETrainingModule(DETrainingModule):
             labels_transform=labels_transform,
             # optimization configs
             optimizer=optimizer,
+            optimizer_is_active=optimizer_is_active,
             optimizer_parameters=optimizer_parameters,
             optimizer_args=optimizer_args,
             # learning rate
@@ -74,6 +78,7 @@ class EDETrainingModule(DETrainingModule):
             scheduler_monitor=scheduler_monitor,
             # instantiation configurations
             save_hparams=False,
+            initialize_superclass=False,
         )
         # instanciate encoder
         self.encoder = (
@@ -93,9 +98,3 @@ class EDETrainingModule(DETrainingModule):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.encoder(inputs)
-
-    # def training_step(self, batch, batch_idx, optimizer_idx=None):
-    #     "Pytorch Lightning's training_step function"
-
-    #     loss = self.step(batch, batch_idx, optimizer_idx, name="train")
-    #     return loss

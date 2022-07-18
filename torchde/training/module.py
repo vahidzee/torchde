@@ -3,10 +3,13 @@ import typing as th
 import functools
 import pytorch_lightning as pl
 import torchde.utils
+import torchde.training.utils
+from torchde.utils import FunctionDescriptor, process_function_description, safe_function_call_wrapper
 from .criterion import Criterion, ResultsDict
 from .attack import PGDAttacker
 import torchmetrics
 import torch
+import types
 
 
 class DETrainingModule(pl.LightningModule):
@@ -26,19 +29,20 @@ class DETrainingModule(pl.LightningModule):
         model: th.Optional[torch.nn.Module] = None,
         model_cls: th.Optional[str] = None,
         model_args: th.Optional[dict] = None,
-        # anomaly detection
-        anomaly_detection_score: th.Optional[th.Union[str, torchde.utils.FunctionDescriptor]] = None,
+        # anomaly detection [score(criterion_results, training_module, inputs) -> torch.Tensor]
+        anomaly_detection_score: th.Optional[th.Union[str, FunctionDescriptor]] = None,
         # criterion
         criterion: th.Union[Criterion, str] = "torchde.training.Criterion",
         criterion_args: th.Optional[dict] = None,
         # attacks
         attack_args: th.Optional[dict] = None,
-        # input transforms
-        inputs_transform: th.Optional[torchde.utils.FunctionDescriptor] = None,
+        # input transforms [transform(inputs) -> torch.Tensor]
+        inputs_transform: th.Optional[FunctionDescriptor] = None,
         inputs_noise_eps: th.Optional[float] = None,
-        labels_transform: th.Optional[torchde.utils.FunctionDescriptor] = None,
-        # optimization configs
+        labels_transform: th.Optional[FunctionDescriptor] = None,
+        # optimization configs [is_active(training_module, optimizer_idx) -> bool]
         optimizer: str = "torch.optim.Adam",
+        optimizer_is_active: th.Optional[th.Union[FunctionDescriptor, th.List[FunctionDescriptor]]] = None,
         optimizer_parameters: th.Optional[th.Union[th.List[str], str]] = None,
         optimizer_args: th.Optional[dict] = None,
         # learning rate
@@ -50,7 +54,9 @@ class DETrainingModule(pl.LightningModule):
         scheduler_interval: th.Union[str, th.List[str]] = "epoch",
         scheduler_frequency: th.Union[int, th.List[int]] = 1,
         scheduler_monitor: th.Optional[th.Union[str, th.List[str]]] = None,
+        # initialization settings
         save_hparams: bool = True,
+        initialize_superclass: bool = True,
     ) -> None:
         """Initialize the trainer.
 
@@ -66,8 +72,9 @@ class DETrainingModule(pl.LightningModule):
         Returns:
             None
         """
-        if save_hparams:
+        if initialize_superclass:
             super().__init__()
+        if save_hparams:
             self.save_hyperparameters(ignore=["model"])
         # criterion and attacks can be different from the checkpointed model
         criterion = criterion if criterion is not None else self.hparams.criterion
@@ -103,13 +110,20 @@ class DETrainingModule(pl.LightningModule):
             # optimizers
             (
                 self.optimizer,
+                self.optimizer_is_active_descriptor,
                 self.optimizer_parameters,
                 self.optimizer_args,
             ), optimizers_count = torchde.utils.list_args(
                 optimizer if optimizer is not None else self.hparams.optimizer,
+                optimizer_is_active if optimizer_is_active is not None else self.hparams.optimizer_is_active,
                 optimizer_parameters if optimizer_parameters is not None else self.hparams.optimizer_parameters,
                 optimizer_args if optimizer_args is not None else self.hparams.optimizer_args,
                 return_length=True,
+            )
+            self.optimizer_is_active_descriptor = (
+                None
+                if all(i is None for i in self.optimizer_is_active_descriptor)
+                else self.optimizer_is_active_descriptor
             )
 
             # learning rates
@@ -155,6 +169,16 @@ class DETrainingModule(pl.LightningModule):
                 self.scheduler_interval = [j for j in self.scheduler_interval for i in range(optimizers_count)]
                 self.scheduler_frequency = [j for j in self.scheduler_frequency for i in range(optimizers_count)]
                 self.scheduler_monitor = [j for j in self.scheduler_monitor for i in range(optimizers_count)]
+            if schedulers_count:
+                self.__scheduler_step_count = [0 for i in range(schedulers_count)]
+
+        if hasattr(self, "optimizer_is_active_descriptor") and self.optimizer_is_active_descriptor is not None:
+            self.automatic_optimization = False
+            self.training_step = types.MethodType(DETrainingModule.training_step_manual, self)
+            self.__params_frozen = [False for i in range(optimizers_count)]
+            self.__params_state = [None for i in range(optimizers_count)]
+        else:
+            self.training_step = types.MethodType(DETrainingModule.training_step_automatic, self)
 
         # initialize the model
         if (
@@ -169,6 +193,15 @@ class DETrainingModule(pl.LightningModule):
                 if model is not None
                 else torchde.utils.get_value(self.hparams.model_cls)(**(self.hparams.model_args or dict()))
             )
+
+    @functools.cached_property
+    def optimizer_is_active(self):
+        if self.optimizer_is_active_descriptor is None:
+            return None
+        return [
+            safe_function_call_wrapper(process_function_description(i, entry_function="is_active"))
+            for i in self.optimizer_is_active_descriptor
+        ]
 
     def forward(self, inputs):
         "Placeholder forward pass for the model"
@@ -346,14 +379,14 @@ class DETrainingModule(pl.LightningModule):
         "Process the inputs before forward pass"
         inputs = inputs if inputs is not None else (batch[0] if isinstance(batch, (tuple, list)) else batch)
         labels = labels if labels is not None else (batch[1] if isinstance(batch, (tuple, list)) else None)
+        if self.inputs_noise_eps:
+            inputs = inputs + torch.randn_like(inputs) * self.inputs_noise_eps
         if transform_inputs:
             inputs = (
                 self.inputs_transform_fucntion(inputs, training_module=self)
                 if self.inputs_transform_fucntion
                 else inputs
             )
-        if self.inputs_noise_eps:
-            inputs = inputs + torch.randn_like(inputs) * self.inputs_noise_eps
         if transform_labels:
             labels = (
                 self.labels_transform_function(labels, training_module=self)
@@ -411,10 +444,65 @@ class DETrainingModule(pl.LightningModule):
                 sync_dist=True,
             )
 
-    def training_step(self, batch, batch_idx, optimizer_idx=None):
-        "Pytorch Lightning's training_step function"
-        return self.step(batch, batch_idx, optimizer_idx, name="train")
+    def training_step_automatic(self, batch, batch_idx, optimizer_idx=None, **kwargs):
+        "Implementation for automatic Pytorch Lightning's training_step function"
+        return self.step(batch, batch_idx, optimizer_idx, name="train", **kwargs)
 
-    def validation_step(self, batch, batch_idx, optimizer_idx=None):
+    def manual_lr_schedulers_step(self, scheduler, scheduler_idx, **kwargs):
+        "Implementation for manual Pytorch Lightning's lr_step function"
+        frequency = self.scheduler_frequency[scheduler_idx]
+        if not frequency:
+            return
+        interval = self.scheduler_interval[scheduler_idx]
+        monitor = self.scheduler_monitor[scheduler_idx]
+
+        step = False
+        if interval == "batch":
+            self.__scheduler_step_count[scheduler_idx] = (1 + self.__scheduler_step_count[scheduler_idx]) % frequency
+            step = not self.__scheduler_step_count[scheduler_idx]
+        elif interval == "epoch":
+            step = self.trainer.is_last_batch and not (self.trainer.current_epoch % frequency)
+        if not step:
+            return
+        if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            if monitor not in self.trainer.callback_metrics:
+                return  # no metric to monitor, skip scheduler step until metric is available in next loops
+            scheduler.step(self.trainer.callback_metrics[monitor])
+        else:
+            scheduler.step()
+
+    def training_step_manual(self, batch, batch_idx, **kwargs):
+        "Implementation for manual training and optimization"
+        optimizers = self.optimizers()
+        optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
+        schedulers = self.lr_schedulers()
+        schedulers = schedulers if isinstance(schedulers, (list, tuple)) else ([schedulers] if schedulers else [])
+        optimizer_is_active = [
+            self.optimizer_is_active[i](training_module=self, optimizer_idx=i) for i in range(len(optimizers))
+        ]
+        # freezing/unfreezing the optimizer parameters
+        for optimizer_idx, optimizer in enumerate(optimizers):
+            if optimizer_is_active[optimizer_idx] and self.__params_frozen[optimizer_idx]:
+                torchde.training.utils.unfreeze_params(
+                    optimizer=optimizer, old_states=self.__params_state[optimizer_idx]
+                )
+                self.__params_frozen[optimizer_idx] = False
+            elif not optimizer_is_active[optimizer_idx] and not self.__params_frozen[optimizer_idx]:
+                self.__params_state[optimizer_idx] = torchde.training.utils.freeze_params(optimizer=optimizer)
+                self.__params_frozen[optimizer_idx] = True
+        loss = self.step(batch, batch_idx, None, name="train")
+        self.manual_backward(loss)
+        for optimizer_idx, optimizer in enumerate(optimizers):
+            if optimizer_is_active[optimizer_idx]:
+                optimizer.step()  # todo: add support for LBFGS optimizers via closures
+                optimizer.zero_grad()  # todo: move to before the backward call and add support for gradient accumulation
+        # following pytorch>=1.1.0 conventions, calling scheduler.step after optimizer.step
+        # visit the docs for more details https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+        for idx, scheduler in enumerate(schedulers):
+            if optimizer_is_active[self.scheduler_optimizer[idx]]:
+                self.manual_lr_schedulers_step(scheduler=scheduler, scheduler_idx=idx)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
         "Pytorch Lightning's validation_step function"
-        return self.step(batch, batch_idx, optimizer_idx, name="val")
+        return self.step(batch, batch_idx, name="val")

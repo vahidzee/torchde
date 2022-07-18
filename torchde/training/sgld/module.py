@@ -2,7 +2,6 @@ import torch
 import typing as th
 from torchde.utils import FunctionDescriptor
 from torchde.training.module import DETrainingModule
-from torchde.training.criterion import Criterion
 from torchde.training.sgld.sampler import SGLDSampler
 from torchde.training.module import DETrainingModule
 
@@ -21,34 +20,59 @@ class SGLDTrainingModule(DETrainingModule):
         criterion_args: th.Optional[dict] = None,
         # attacks
         attack_args: th.Optional[dict] = None,
+        # input transforms
         inputs_transform: th.Optional[FunctionDescriptor] = None,
+        inputs_noise_eps: th.Optional[float] = None,
+        labels_transform: th.Optional[FunctionDescriptor] = None,
         # optimization configs
         optimizer: str = "torch.optim.Adam",
+        optimizer_is_active: th.Optional[th.Union[FunctionDescriptor, th.List[FunctionDescriptor]]] = None,
+        optimizer_parameters: th.Optional[th.Union[th.List[str], str]] = None,
         optimizer_args: th.Optional[dict] = None,
-        lr: float = 1e-4,
-        scheduler: th.Optional[str] = None,
-        scheduler_args: th.Optional[dict] = None,
-        scheduler_interval: str = "epoch",
-        scheduler_frequency: int = 1,
-        scheduler_monitor: th.Optional[str] = None,
+        # learning rate
+        lr: th.Union[th.List[float], float] = 1e-4,
+        # schedulers
+        scheduler: th.Optional[th.Union[str, th.List[str]]] = None,
+        scheduler_optimizer: th.Optional[th.Union[int, th.List[int]]] = None,
+        scheduler_args: th.Optional[th.Union[dict, th.List[dict]]] = None,
+        scheduler_interval: th.Union[str, th.List[str]] = "epoch",
+        scheduler_frequency: th.Union[int, th.List[int]] = 1,
+        scheduler_monitor: th.Optional[th.Union[str, th.List[str]]] = None,
+        # instantiation configs
+        save_hparams: bool = True,
     ) -> None:
         super().__init__(
+            # model
             model=model,
             model_cls=model_cls,
             model_args=model_args,
+            # anomaly detection
             anomaly_detection_score=anomaly_detector_score,
+            # criterion
             criterion="torchde.training.sgld.criterion.SGLDTrainingCriterion",
             criterion_args=criterion_args,
+            # attacks
             attack_args=attack_args,
+            # input transforms
             inputs_transform=inputs_transform,
+            inputs_noise_eps=inputs_noise_eps,
+            labels_transform=labels_transform,
+            # optimization configs
             optimizer=optimizer,
+            optimizer_is_active=optimizer_is_active,
+            optimizer_parameters=optimizer_parameters,
             optimizer_args=optimizer_args,
+            # learning rate
             lr=lr,
+            # schedulers
             scheduler=scheduler,
             scheduler_args=scheduler_args,
+            scheduler_optimizer=scheduler_optimizer,
             scheduler_interval=scheduler_interval,
             scheduler_frequency=scheduler_frequency,
+            # instanciation configs
             scheduler_monitor=scheduler_monitor,
+            save_hparams=save_hparams,
         )
         self.sampler = SGLDSampler(model=self.model, **(sampler_args or self.hparams.sampler_args or {}))
 
