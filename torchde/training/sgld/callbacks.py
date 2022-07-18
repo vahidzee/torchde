@@ -124,7 +124,7 @@ class SGLDLogSamplesCallback(pl.Callback):
                 model=pl_module,
                 init_inputs=SGLDSampler.generate_rand_inputs(
                     self.num_samples, self.inputs_shape, self.inputs_value_range
-                ),
+                ).to(pl_module.device),
                 num_steps=self.num_steps,
                 step_size=self.step_size,
                 noise_eps=self.noise_eps,
