@@ -116,7 +116,19 @@ def __get_value(name: str, strict: bool = True, upwards=True, context=None):
     return var
 
 
-def get_value(name, prefer_modules: bool = False, strict: bool = True, context=None):
+def get_value(name, prefer_modules: bool = False, strict: bool = True, context=None, num_trys=3):
+    for _ in range(num_trys):
+        try:
+            return _get_value(name, strict=strict, prefer_modules=prefer_modules, context=context)
+        except KeyError:
+            pass
+        except AttributeError:
+            pass
+        except ImportError:
+            pass
+
+
+def _get_value(name, prefer_modules: bool = False, strict: bool = True, context=None):
     results = []
     try:
         results.append(__get_value(name, upwards=True, strict=strict, context=context))
