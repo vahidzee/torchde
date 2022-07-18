@@ -47,11 +47,11 @@ class SGLDSampler:
         # buffer
         assert 0.0 <= buffer_replay_prob <= 1.0, "buffer_replay_prob should be a probability (between zero and one)"
         self.buffer_size, self.buffer_replay_prob = buffer_size, buffer_replay_prob
-        self.buffer = [(torch.rand((1,) + inputs_shape) * 2 - 1) for _ in range(self.buffer_size)]
+        self.buffer = [(torch.rand((1,) + self.inputs_shape) * 2 - 1) for _ in range(self.buffer_size)]
         # algorithm
         self.num_steps, self.step_size = num_steps, step_size
         self.noise_eps = noise_eps
-        self.grad_clamp = grad_clamp
+        self.grad_clamp = tuple(grad_clamp)
 
     @functools.cached_property
     def energy_function(self):
@@ -194,7 +194,7 @@ class SGLDSampler:
                 out_imgs = -model(samples, **kwargs)
             else:
                 out_imgs = energy_function(samples, model=model, **kwargs)
-            out_imgs.sum().backward()
+            out_imgs.mean().backward()
             if grad_clamp:
                 # For stabilizing and preventing too high gradients
                 samples.grad.data.clamp_(*(grad_clamp if isinstance(grad_clamp, tuple) else (-grad_clamp, grad_clamp)))

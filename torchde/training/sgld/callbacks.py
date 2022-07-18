@@ -20,7 +20,7 @@ class SGLDLogSamplerBufferCallback(pl.Callback):
     def __init__(
         self,
         num_samples: int = 32,
-        every_n_epochs: int = 5,
+        every_n_epochs: int = 1,
         grid_args: th.Optional[dict] = None,
     ):
         super().__init__()
@@ -56,7 +56,7 @@ class SGLDLogSamplesCallback(pl.Callback):
         # sample generation configuarations
         num_steps: th.Optional[int] = None,
         step_size: th.Optional[int] = None,
-        noise_eps: th.Optional[int] = None,
+        noise_eps: th.Optional[float] = None,
         grad_clamp: th.Optional[th.Union[tuple, list]] = None,
         inputs_value_range: th.Optional[th.Union[tuple, list]] = None,
         inputs_shape: th.Optional[th.Union[tuple, list]] = None,
@@ -125,16 +125,13 @@ class SGLDLogSamplesCallback(pl.Callback):
                 init_inputs=SGLDSampler.generate_rand_inputs(
                     self.num_samples, self.inputs_shape, self.inputs_value_range
                 ),
-                sample_size=self.num_samples,
                 num_steps=self.num_steps,
                 step_size=self.step_size,
                 noise_eps=self.noise_eps,
                 grad_clamp=self.grad_clamp,
-                buffer_replay_prob=self.buffer_replay_prob,
                 return_samples_per_step=self.visualize_steps,
                 inputs_value_range=self.inputs_value_range,
                 energy_function=self.energy_function,
                 training_module=pl_module,
-                device=pl_module.device,
             )
         return samples

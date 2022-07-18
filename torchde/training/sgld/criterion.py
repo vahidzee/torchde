@@ -10,8 +10,10 @@ class SGLDTrainingCriterion(Criterion):
 
     def __init__(
         self,
-        terms: th.List[TermDescriptor] = ("torchde.training.sgld.terms.SGLDContrastiveDivergenceTerm",),
-        regularizations: th.Optional[th.List[TermDescriptor]] = (
+        terms: th.Union[th.List[TermDescriptor], th.Tuple[TermDescriptor]] = (
+            "torchde.training.sgld.terms.SGLDContrastiveDivergenceTerm",
+        ),
+        regularizations: th.Optional[th.Union[th.List[TermDescriptor], th.Tuple[TermDescriptor]]] = (
             "torchde.training.sgld.terms.SGLDScoreRegularizationTerm",
         ),
         **kwargs,

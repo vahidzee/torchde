@@ -10,8 +10,10 @@ class EDETrainingCriterion(Criterion):
 
     def __init__(
         self,
-        terms: th.List[TermDescriptor] = ("torchde.training.encoding.terms.EDEStepTerm",),
-        regularizations: th.Optional[th.List[TermDescriptor]] = None,
+        terms: th.Union[th.List[TermDescriptor], th.Tuple[TermDescriptor]] = (
+            "torchde.training.encoding.terms.EDEStepTerm",
+        ),
+        regularizations: th.Optional[th.Union[th.List[TermDescriptor], th.Tuple[TermDescriptor]]] = None,
         **kwargs,
     ):
         super().__init__(terms=terms, regularizations=regularizations, **kwargs)

@@ -13,7 +13,7 @@ class SGLDTrainingModule(DETrainingModule):
         model: th.Optional[torch.nn.Module] = None,
         model_cls: th.Optional[str] = None,
         model_args: th.Optional[dict] = None,
-        anomaly_detector_score: th.Optional[th.Union[str, FunctionDescriptor]] = None,
+        anomaly_detection_score: th.Optional[th.Union[str, FunctionDescriptor]] = None,
         # sampler
         sampler_args: th.Optional[dict] = None,
         # criterion
@@ -33,6 +33,7 @@ class SGLDTrainingModule(DETrainingModule):
         lr: th.Union[th.List[float], float] = 1e-4,
         # schedulers
         scheduler: th.Optional[th.Union[str, th.List[str]]] = None,
+        scheduler_name: th.Optional[th.Union[str, th.List[str]]] = None,
         scheduler_optimizer: th.Optional[th.Union[int, th.List[int]]] = None,
         scheduler_args: th.Optional[th.Union[dict, th.List[dict]]] = None,
         scheduler_interval: th.Union[str, th.List[str]] = "epoch",
@@ -47,7 +48,7 @@ class SGLDTrainingModule(DETrainingModule):
             model_cls=model_cls,
             model_args=model_args,
             # anomaly detection
-            anomaly_detection_score=anomaly_detector_score,
+            anomaly_detection_score=anomaly_detection_score,
             # criterion
             criterion="torchde.training.sgld.criterion.SGLDTrainingCriterion",
             criterion_args=criterion_args,
@@ -66,6 +67,7 @@ class SGLDTrainingModule(DETrainingModule):
             lr=lr,
             # schedulers
             scheduler=scheduler,
+            scheduler_name=scheduler_name,
             scheduler_args=scheduler_args,
             scheduler_optimizer=scheduler_optimizer,
             scheduler_interval=scheduler_interval,

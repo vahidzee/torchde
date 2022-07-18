@@ -22,8 +22,8 @@ class Criterion:
 
     def __init__(
         self,
-        terms: th.List["TermDescriptor"] = None,
-        regularizations: th.Optional[th.List[TermDescriptor]] = None,
+        terms: th.Optional[th.Union[th.List[TermDescriptor], th.Tuple[TermDescriptor]]] = None,
+        regularizations: th.Optional[th.Union[th.List[TermDescriptor], th.Tuple[TermDescriptor]]] = None,
         terms_reduction: str = "sum",  # sum or multiply
         regularizations_reduction: str = "sum",  # sum or multiply
         overall_reduction: str = "sum",  # sum or multiply

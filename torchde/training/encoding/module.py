@@ -38,6 +38,7 @@ class EDETrainingModule(DETrainingModule):
         lr: th.Union[th.List[float], float] = 1e-4,
         # schedulers
         scheduler: th.Optional[th.Union[str, th.List[str]]] = None,
+        scheduler_name: th.Optional[th.Union[str, th.List[str]]] = None,
         scheduler_optimizer: th.Optional[th.Union[int, th.List[int]]] = None,
         scheduler_args: th.Optional[th.Union[dict, th.List[dict]]] = None,
         scheduler_interval: th.Union[str, th.List[str]] = "epoch",
@@ -71,6 +72,7 @@ class EDETrainingModule(DETrainingModule):
             lr=lr,
             # schedulers
             scheduler=scheduler,
+            scheduler_name=scheduler_name,
             scheduler_optimizer=scheduler_optimizer,
             scheduler_args=scheduler_args,
             scheduler_interval=scheduler_interval,
