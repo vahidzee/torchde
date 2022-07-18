@@ -99,6 +99,8 @@ class SampleAdversariesCallback(pl.Callback):
         difference_map_overlay_alpha: float = 0.6,
         difference_map_normalize: bool = False,
         grid_args: th.Optional[dict] = None,
+        log_original_inputs: bool = True,
+        original_grid_args: th.Optional[dict] = None,
         adversaries_grid_args: th.Optional[dict] = None,
         difference_map_grid_args: th.Optional[dict] = None,
     ):
@@ -115,9 +117,11 @@ class SampleAdversariesCallback(pl.Callback):
         # visualization configs
         self.reshape = tuple(reshape) if reshape else None
         self.difference_map_overlay_alpha = difference_map_overlay_alpha
+        self.original_grid_args = {**(grid_args or dict()), **(original_grid_args or dict())}
         self.adversaries_grid_args = {**(grid_args or dict()), **(adversaries_grid_args or dict())}
         self.difference_map_grid_args = {**(grid_args or dict()), **(difference_map_grid_args or dict())}
         self.difference_map_normalize = difference_map_normalize
+        self.log_original_inputs = log_original_inputs
 
     def setup(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", stage: th.Optional[str] = None) -> None:
         if stage == "fit":
@@ -193,10 +197,21 @@ class SampleAdversariesCallback(pl.Callback):
         inputs = next(self.inputs_iterator)
         adversaries = self.get_adversaries(trainer=trainer, pl_module=pl_module, inputs=inputs)
 
+        # log original inputs
+        if self.log_original_inputs:
+            trainer.logger.experiment.add_image(
+                f"attack/original_inputs",
+                torchvision.utils.make_grid(
+                    self.process_shape(inputs, force_grayscale=False), **self.adversaries_grid_args
+                ),
+                global_step=trainer.global_step,
+            )
         # visualize adversaries
         trainer.logger.experiment.add_image(
             f"attack/adversaries",
-            torchvision.utils.make_grid(self.process_shape(adversaries), **self.adversaries_grid_args),
+            torchvision.utils.make_grid(
+                self.process_shape(adversaries, force_grayscale=False), **self.adversaries_grid_args
+            ),
             global_step=trainer.global_step,
         )
 
