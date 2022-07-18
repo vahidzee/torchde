@@ -32,6 +32,11 @@ class DEDataModule(pl.LightningDataModule):
         train_batch_size: th.Optional[int] = None,
         val_batch_size: th.Optional[int] = None,
         test_batch_size: th.Optional[int] = None,
+        # pin memory
+        pin_memory: bool = True,
+        train_pin_memory: th.Optional[bool] = None,
+        val_pin_memory: th.Optional[bool] = None,
+        test_pin_memory: th.Optional[bool] = None,
         # shuffle
         train_shuffle: bool = True,
         val_shuffle: bool = False,
@@ -89,6 +94,11 @@ class DEDataModule(pl.LightningDataModule):
             self.train_batch_size or self.val_batch_size or self.test_batch_size
         ), "at least one of batch_sizes should be a positive number"
 
+        # pin memory
+        self.train_pin_memory = train_pin_memory if train_pin_memory is not None else pin_memory
+        self.val_pin_memory = val_pin_memory if val_pin_memory is not None else pin_memory
+        self.test_pin_memory = test_pin_memory if test_pin_memory is not None else pin_memory
+
         # shuffle
         self.train_shuffle, self.val_shuffle, self.test_shuffle = (
             train_shuffle,
@@ -112,7 +122,6 @@ class DEDataModule(pl.LightningDataModule):
         if (stage == "fit" or stage == "tune") and self.train_batch_size:
             dataset = self.get_dataset(
                 self.train_dataset,
-                train=True,
                 transform=self.transforms_train,
                 **self.train_dataset_args,
             )
@@ -152,7 +161,6 @@ class DEDataModule(pl.LightningDataModule):
                 self.get_dataset(
                     self.test_dataset,
                     transform=self.transforms_test,
-                    train=False,
                     **self.test_dataset_args,
                 ),
             )
@@ -160,18 +168,20 @@ class DEDataModule(pl.LightningDataModule):
                 test_data if self.normal_targets is None else IsNormalDataset(test_data, self.normal_targets)
             )
 
-    def get_dataloader(self, name, batch_size=None, shuffle=None, num_workers=None, **params):
+    def get_dataloader(self, name, batch_size=None, shuffle=None, num_workers=None, pin_memory=None, **params):
         data = getattr(self, f"{name}_data")
         if data is None:
             return None
         batch_size = batch_size if batch_size is not None else getattr(self, f"{name}_batch_size")
         shuffle = shuffle if shuffle is not None else getattr(self, f"{name}_shuffle")
         num_workers = num_workers if num_workers is not None else getattr(self, f"{name}_num_workers")
+        pin_memory = pin_memory if pin_memory is not None else getattr(self, f"{name}_pin_memory")
         return DataLoader(
             dataset=data,
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=num_workers,
+            pin_memory=pin_memory,
             **params,
         )
 
