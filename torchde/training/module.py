@@ -49,6 +49,7 @@ class DETrainingModule(pl.LightningModule):
         lr: th.Union[th.List[float], float] = 1e-4,
         # schedulers
         scheduler: th.Optional[th.Union[str, th.List[str]]] = None,
+        scheduler_name: th.Optional[th.Union[str, th.List[str]]] = None,
         scheduler_optimizer: th.Optional[th.Union[int, th.List[int]]] = None,
         scheduler_args: th.Optional[th.Union[dict, th.List[dict]]] = None,
         scheduler_interval: th.Union[str, th.List[str]] = "epoch",
@@ -132,6 +133,7 @@ class DETrainingModule(pl.LightningModule):
             (
                 (
                     self.scheduler,
+                    self.scheduler_name,
                     self.scheduler_optimizer,
                     self.scheduler_args,
                     self.scheduler_interval,
@@ -141,6 +143,7 @@ class DETrainingModule(pl.LightningModule):
                 schedulers_count,
             ) = torchde.utils.list_args(
                 scheduler if scheduler is not None else self.hparams.scheduler,
+                scheduler_name if scheduler_name is not None else self.hparams.scheduler_name,
                 scheduler_optimizer if scheduler_optimizer is not None else self.hparams.scheduler_optimizer,
                 scheduler_args if scheduler_args is not None else self.hparams.scheduler_args,
                 scheduler_interval if scheduler_interval is not None else self.hparams.scheduler_interval,
@@ -152,12 +155,13 @@ class DETrainingModule(pl.LightningModule):
             if not schedulers_count:
                 (
                     self.scheduler,
+                    self.scheduler_name,
                     self.scheduler_optimizer,
                     self.scheduler_args,
                     self.scheduler_frequency,
                     self.scheduler_interval,
                     self.scheduler_monitor,
-                ) = (None, None, None, None, None, None)
+                ) = (None, None, None, None, None, None, None)
             if (schedulers_count == 1 and optimizers_count > 1) or (
                 schedulers_count > 1
                 and optimizers_count > 1
@@ -165,12 +169,21 @@ class DETrainingModule(pl.LightningModule):
             ):
                 self.scheduler_optimizer = [i for j in range(schedulers_count) for i in range(optimizers_count)]
                 self.scheduler = [j for j in self.scheduler for i in range(optimizers_count)]
+                self.scheduler_name = [j for j in self.scheduler_name for i in range(optimizers_count)]
                 self.scheduler_args = [j for j in self.scheduler_args for i in range(optimizers_count)]
                 self.scheduler_interval = [j for j in self.scheduler_interval for i in range(optimizers_count)]
                 self.scheduler_frequency = [j for j in self.scheduler_frequency for i in range(optimizers_count)]
                 self.scheduler_monitor = [j for j in self.scheduler_monitor for i in range(optimizers_count)]
             if schedulers_count:
-                self.__scheduler_step_count = [0 for i in range(schedulers_count)]
+                for idx, name in enumerate(self.scheduler_name):
+                    param_name = self.optimizer_parameters[self.scheduler_optimizer[idx]]
+                    param_name = (
+                        f"/{param_name}"
+                        if param_name and isinstance(param_name, str)
+                        else f"/{self.scheduler_optimizer[idx]}"
+                    )
+                    self.scheduler_name[idx] = f"lr_scheduler{param_name}/{name if name is not None else idx}"
+                self.__scheduler_step_count = [0 for i in range(len(self.scheduler))]
 
         if hasattr(self, "optimizer_is_active_descriptor") and self.optimizer_is_active_descriptor is not None:
             self.automatic_optimization = False
@@ -286,14 +299,16 @@ class DETrainingModule(pl.LightningModule):
                     sched_interval=sched_interval,
                     sched_frequency=sched_frequency,
                     sched_monitor=sched_monitor,
+                    sched_name=sched_name,
                 )
-                for sched_cls, sched_optimizer, sched_args, sched_interval, sched_frequency, sched_monitor in zip(
+                for sched_cls, sched_optimizer, sched_args, sched_interval, sched_frequency, sched_monitor, sched_name in zip(
                     self.scheduler,
                     self.scheduler_optimizer,
                     self.scheduler_args,
                     self.scheduler_interval,
                     self.scheduler_frequency,
                     self.scheduler_monitor,
+                    self.scheduler_name,
                 )
             ]
             if self.scheduler
@@ -315,7 +330,7 @@ class DETrainingModule(pl.LightningModule):
         return opt
 
     def __configure_scheduler(
-        self, sched_class, sched_optimizer, sched_args, sched_interval, sched_frequency, sched_monitor
+        self, sched_class, sched_optimizer, sched_args, sched_interval, sched_frequency, sched_monitor, sched_name
     ):
         sched_class = torchde.utils.get_value(sched_class)
         sched_args = sched_args or dict()
@@ -324,6 +339,7 @@ class DETrainingModule(pl.LightningModule):
             scheduler=sched,
             interval=sched_interval,
             frequency=sched_frequency,
+            name=sched_name,
             reduce_on_plateau=isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau),
         )
         if sched_monitor is not None:
@@ -412,6 +428,8 @@ class DETrainingModule(pl.LightningModule):
             results["anomaly_detection/score/normal"] = normal_scores.mean()
         if anomaly_scores.shape[0] != 0:
             results["anomaly_detection/score/anomaly"] = anomaly_scores.mean()
+        if anomaly_scores.shape[0] != 0 and normal_scores.shape[0] != 0:
+            results["anomaly_detection/score/difference"] = normal_scores.mean() - anomaly_scores.mean()
         results["metrics/auroc"] = self.val_auroc
         return results
 
