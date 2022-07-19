@@ -163,9 +163,7 @@ class DETrainingModule(pl.LightningModule):
                     self.scheduler_monitor,
                 ) = (None, None, None, None, None, None, None)
             if (schedulers_count == 1 and optimizers_count > 1) or (
-                schedulers_count > 1
-                and optimizers_count > 1
-                and all(self.scheduler_optimizer[i] is None for i in range(schedulers_count))
+                schedulers_count > 0 and all(self.scheduler_optimizer[i] is None for i in range(schedulers_count))
             ):
                 self.scheduler_optimizer = [i for j in range(schedulers_count) for i in range(optimizers_count)]
                 self.scheduler = [j for j in self.scheduler for i in range(optimizers_count)]
