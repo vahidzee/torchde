@@ -512,7 +512,10 @@ class DETrainingModule(pl.LightningModule):
                 self.__params_state[optimizer_idx] = torchde.training.utils.freeze_params(optimizer=optimizer)
                 self.__params_frozen[optimizer_idx] = True
         loss = self.step(batch, batch_idx, None, name="train")
-        self.manual_backward(loss)
+        if ~(torch.isnan(loss) | torch.isinf(loss)):
+            self.manual_backward(loss)
+        else:
+            return loss
         for optimizer_idx, optimizer in enumerate(optimizers):
             if optimizer_is_active[optimizer_idx]:
                 optimizer.step()  # todo: add support for LBFGS optimizers via closures
