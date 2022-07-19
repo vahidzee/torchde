@@ -312,10 +312,15 @@ class DETrainingModule(pl.LightningModule):
             if self.scheduler
             else None
         )
-        optimizers = optimizers if len(optimizers) > 1 else optimizers[0]
         if schedulers:
-            schedulers = schedulers if len(schedulers) > 1 else schedulers[0]
-            return optimizers, schedulers
+            return (
+                dict(optimizer=optimizers[0], scheduler=schedulers[0])
+                if len(schedulers) == 1 and len(optimizers) == 1
+                else (
+                    optimizers,
+                    schedulers,
+                )
+            )
         return optimizers
 
     def __configure_optimizer(self, opt_class, opt_base_lr, opt_args, opt_parameters):
